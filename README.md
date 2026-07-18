@@ -5,16 +5,26 @@ trusting it.
 
 ## Start here
 
-Download or clone this repo, open the folder in your AI coding assistant (Claude Code, GitHub Copilot,
-Cursor, Codex — any of them), and paste this:
+You need an AI assistant that can **read and write files on your own computer** — Claude Code, GitHub
+Copilot in VS Code, Cursor, Codex, or similar. Open it and paste this:
 
-> Read `AGENTS.md`, `README.md`, `MODES.md` and `LIMITATIONS.md` in this repo.
+> Clone https://github.com/jackwjensen/bible-study-framework into a folder on my computer, and set up
+> anything I'm missing as you go — git, Python. This copy is mine: my findings go into it, and nothing
+> goes back to the original repo.
 >
-> Then, before we begin: tell me in plain language the ways you are likely to mislead me in biblical
-> study, and what pushback you need from me. After that, ask me which operating mode I want to work in.
+> Read `AGENTS.md`, `README.md`, `MODES.md` and `LIMITATIONS.md`, then confirm the tooling runs.
+>
+> Before we begin: tell me in plain language the ways you are likely to mislead me in biblical study,
+> and what pushback you need from me. Then ask me which operating mode I want to work in.
 
 That's the whole setup. You don't need to know git, you don't need a GitHub account, and you don't need
-to read the rest of this page — your assistant will walk you through it.
+to read the rest of this page — your assistant will walk you through it, including installing whatever
+your machine is missing.
+
+> **A chatbot in a browser tab will not work.** It can discuss this framework, but it cannot clone the
+> repository, create your finding files, or run the validator — so there is nothing to build your corpus
+> *in*. The test is simple: if it cannot create a file on your computer, it is the wrong tool for this.
+> The assistants named above all can; the same company's website chat generally cannot.
 
 The rest is for whoever wants to understand what they just started.
 
