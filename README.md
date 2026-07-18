@@ -217,3 +217,14 @@ Bug reports and framework improvements are welcome; theological content is out o
 
 The framework was extracted from a working personal corpus and ships **empty** — those findings are the
 author's and stay with them. Yours should be yours.
+
+### Licence
+
+Dual-licensed, because the repo is two different kinds of work:
+
+- **Code** (`build_index.py`, `packs.py`, the workflow) — [MIT](LICENSE). Use it, change it, ship it.
+- **Documentation** (this file, `LIMITATIONS.md`, `MODES.md`, `PACKS.md`, `AGENTS.md`,
+  `CONTRIBUTING.md`) — [CC BY 4.0](LICENSE-DOCS). Adapt it freely; credit the source.
+
+The prose is the substance here, and CC BY means that if you build on `LIMITATIONS.md` in your own
+project, the attribution travels with it.
