@@ -1,0 +1,47 @@
+# Validates the corpus on every push and pull request.
+#
+# This matters most for contributions: a pull request gets its findings checked
+# for broken [[wikilinks]], unknown edge ids, duplicate or mismatched ids, missing
+# required fields and invalid status/claim_type/origin values before a human looks
+# at it. Review is then about substance rather than schema-checking by hand.
+#
+# Deliberately does NOT regenerate INDEX.md and commit it back. Pull requests from
+# forks get a read-only token, so it could not push anyway — and a contributor's
+# regenerated index in the diff is noise. Regenerate locally, or let the maintainer
+# do it on merge.
+#
+# Note this only helps corpora hosted on GitHub. Most people using this framework
+# run the validator locally via their assistant and never open a GitHub account,
+# which is fine and fully supported — see README.md.
+
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate the corpus
+        run: python build_index.py --check
+
+      - name: Confirm INDEX.md is up to date
+        run: |
+          python build_index.py
+          if ! git diff --quiet -- INDEX.md; then
+            echo "::error::INDEX.md is stale. Run 'python build_index.py' and commit the result."
+            git diff -- INDEX.md
+            exit 1
+          fi
