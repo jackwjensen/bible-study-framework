@@ -1,0 +1,18 @@
+# Generated caches (INDEX.md is generated but IS committed — it is the read surface)
+*.sqlite
+*.sqlite3
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# MSYS/Git-Bash ghost dirs from Docker volume path conversion on Windows
+*;C/
+
+# Packs you receive are other people's work — keep them out of your history by
+# default. Delete this line if you would rather version what you have imported.
+imported/
+subscriptions.json
