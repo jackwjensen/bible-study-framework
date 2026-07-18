@@ -1,0 +1,30 @@
+name: Feature or schema request
+description: Something the framework cannot currently express or do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please describe the **problem before the solution**. "I couldn't express X
+        about a finding" is more useful than "add field Y" — the schema is
+        deliberately small, and often an existing field or edge already covers it.
+
+        Note the scope: this repo accepts framework improvements, not theological
+        content. See [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md).
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What were you trying to record or do, and what stopped you?
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: What you tried
+      description: Which existing field, edge or status did you attempt to use, and why did it not fit?
+  - type: textarea
+    id: proposal
+    attributes:
+      label: A proposal, if you have one
+      description: Optional. The problem statement above matters more.

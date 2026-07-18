@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in the tooling behaves wrongly
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Validator bugs are the most valuable reports here. If `--check` passes on a
+        corpus that is actually broken, that is serious — the validator is the thing
+        keeping a corpus honest over years.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What you ran, and what happened
+      placeholder: |
+        $ python build_index.py --check
+        ...output...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: A minimal finding file that reproduces it
+      description: Only if the bug is in parsing or validation. Strip it to the smallest file that still misbehaves.
+      render: markdown
+  - type: input
+    id: python-version
+    attributes:
+      label: Python version
+      placeholder: "python --version"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11 / macOS 15 / Ubuntu 24.04"
+    validations:
+      required: true

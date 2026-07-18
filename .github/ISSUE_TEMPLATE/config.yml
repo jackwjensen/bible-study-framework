@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Scope — what this repo does and does not accept
+    url: https://github.com/jackwjensen/bible-study-framework/blob/main/CONTRIBUTING.md
+    about: Framework improvements are welcome. Theological content and doctrinal positions are out of scope — that is a scope decision, not a judgement about your view.
+  - name: How this framework can mislead you
+    url: https://github.com/jackwjensen/bible-study-framework/blob/main/LIMITATIONS.md
+    about: If an AI assistant gave you a wrong or one-sided answer, start here — it is probably a documented failure mode rather than a bug.

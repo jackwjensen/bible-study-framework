@@ -1,7 +1,14 @@
 # Bible Study Framework
 
+[![check](https://github.com/jackwjensen/bible-study-framework/actions/workflows/check.yml/badge.svg)](https://github.com/jackwjensen/bible-study-framework/actions/workflows/check.yml)
+[![code: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
+[![docs: CC BY 4.0](https://img.shields.io/badge/docs-CC%20BY%204.0-lightgrey.svg)](LICENSE-DOCS)
+
 A method and a small toolchain for doing biblical study **with an AI assistant** without ending up
 trusting it.
+
+Works with any assistant that can read and write files on your computer — Claude Code, GitHub Copilot,
+Cursor, Codex. Instructions live in the cross-tool [`AGENTS.md`](AGENTS.md) format.
 
 ## Start here
 
