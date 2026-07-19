@@ -78,6 +78,54 @@ the ones it reconstructed.
 lexicon, a translation-comparison site. Especially any claim of the form "no translation says X" or "this
 word occurs only twice." Those are checkable in a minute and wrong often enough to matter.
 
+## 6. It resolves contradictions by splitting word senses
+
+Scripture genuinely does use key words in several senses — *nomos* covers the Pentateuch, the whole Old
+Testament, the Sinai code, and "any governing principle"; "evil" collapses two distinct Hebrew senses;
+"burden" renders two different Greek words four verses apart. Spotting this is one of the things an
+assistant is genuinely good at, which is exactly what makes the failure hard to catch.
+
+The same move applied without limit will dissolve **any** contradiction. There is always a
+plausible-sounding sense in which the two verses were never talking about the same thing.
+
+**What the framework does about it:** the corrective is a question you can hold the assistant to —
+**does the text mark the split, or does the reader?** Scripture marks its own splits often enough to set
+a standard: Romans 9:6 ("they are not all Israel, which are of Israel"), John 11:11-14 ("Lazarus
+sleepeth" → "Jesus said plainly, Lazarus is dead"), 1 Samuel 15:29 ("he is not a *man*"), Proverbs
+26:4-5's two *lest*-clauses. Where the text supplies no key, the split is a proposal and takes
+`claim_type: open`.
+
+**What you must do about it:** ask where the distinction came from, every time — and watch the hit rate.
+**A method that resolves everything it touches has stopped being exegesis.** If nothing ever comes back
+"no split; the tension is real," the tool is relieving discomfort rather than reading.
+
+## 7. It supplies tone the text does not carry
+
+A written text carries *sense*. It does not carry *force*. Tone, irony, warmth, sarcasm and register are
+borne by voice, face and relationship; they rest on **convention rather than grammar**, and they do not
+survive into writing. There is no rule to recover them from.
+
+An assistant will nonetheless tell you how a line sounded — fluently, and without hedging — because a
+reading feels incomplete without it, and because it has absorbed a great deal of commentary that does
+the same.
+
+Scripture supplies tone only where the **narrator** does, and it does so often enough to show the
+difference: Luke 18:9 ("which trusted in themselves ... and despised others"), John 6:6 ("this he said
+to prove him"), John 12:6 ("not that he cared for the poor"), John 11:51, Luke 9:33. Where that track is
+silent the tone is **unrecoverable** — Matthew 15:26 ("the children's bread ... unto dogs") and John 2:4
+("Woman, what have I to do with thee?") both read as harsh in English, and neither text says how they
+were said.
+
+**What you must do about it:** prefer **distribution** to tone. That "Lord, Lord" occurs five times
+(Matthew 7:21, 7:22, 25:11; Luke 6:46, 13:25) and **every occurrence is a rejection scene** is
+checkable, and it holds without anyone having to hear how it was said. Where an argument genuinely needs
+a tone, mark it `open` and name whose ear supplied it — usually your own culture's.
+
+*6 and 7 are also written up, as instructions rather than warnings, under
+[Reading discipline](MODES.md#reading-discipline--two-things-the-reader-supplies-without-noticing) in
+`MODES.md`. Unlike 1-5 they are failures the **reader** commits too, which is why they appear in both
+places.*
+
 ---
 
 ## The one that doesn't have a fix

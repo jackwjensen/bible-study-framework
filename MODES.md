@@ -134,7 +134,9 @@ which holds without anyone having to hear how it was said. Where an argument gen
 mark it `open` and name whose ear supplied it.
 
 Both are **reader** failures, so a recipient of shared findings must self-police them: there is no
-author-refusing-things loop on the receiving end.
+author-refusing-things loop on the receiving end. They also appear as failures 6 and 7 in
+[`LIMITATIONS.md`](LIMITATIONS.md) — stated there as warnings rather than instructions, because the
+assistant commits them as readily as the reader does.
 
 ## How the modes feed the corpus
 
