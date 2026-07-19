@@ -86,6 +86,34 @@ def slug_ok(value: str) -> bool:
     return value != "" and all(c.isalnum() or c in "-_" for c in value)
 
 
+def slugify(text: str) -> str:
+    """Lowercase kebab-case slug; anything not alphanumeric becomes a separator."""
+    out = []
+    for ch in text.lower():
+        out.append(ch if ch.isalnum() else "-")
+    return "-".join(part for part in "".join(out).split("-") if part)
+
+
+def default_pack_id(author_id: str, themes: str | None, title: str, is_everything: bool) -> str:
+    """
+    Derive a pack id when one is not given.
+
+    Named after *what is in it*, so a second pack never collides with the first:
+    the theme(s) when exporting by theme, "all" for a whole-corpus export, and a
+    slug of the title for an explicit list of findings.
+    """
+    if themes:
+        suffix = "-".join(slugify(t) for t in sorted(t.strip() for t in themes.split(",")) if t.strip())
+    elif is_everything:
+        suffix = "all"
+    else:
+        suffix = slugify(title)
+        if len(suffix) > 40:                      # trim at a word boundary, not mid-word
+            suffix = suffix[:40].rsplit("-", 1)[0]
+        suffix = suffix or "selection"
+    return f"{author_id}-{suffix}"
+
+
 # ── export ───────────────────────────────────────────────────────────────────
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -111,7 +139,9 @@ def cmd_export(args: argparse.Namespace) -> int:
     if not selected:
         die("nothing selected — no findings matched")
 
-    pack_id = args.pack or f"{args.author_id}-pack"
+    pack_id = args.pack or default_pack_id(
+        args.author_id, args.themes, args.title,
+        is_everything=not (args.findings or args.themes))
     manifest = "\n".join([
         "---",
         f"pack: {pack_id}",
@@ -389,6 +419,13 @@ def main(argv: list[str]) -> int:
     p_pull.add_argument("--all", action="store_true", help="also import packs you don't have yet")
     p_pull.add_argument("-y", "--yes", action="store_true", help="skip confirmation prompts")
     p_pull.set_defaults(func=cmd_pull)
+
+    # Pack titles and finding titles carry em dashes, Greek and Hebrew. A Windows
+    # console on a legacy codepage raises UnicodeEncodeError on those, which would
+    # kill an import mid-run — after files were staged but before they were placed.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
 
     args = parser.parse_args(argv[1:])
     IMPORTED_DIR.mkdir(exist_ok=True)

@@ -65,6 +65,10 @@ What this pack covers, what state it's in, and anything a reader should know bef
 `pack`, `title`, `author` and `author_id` are required. `author_id` becomes the directory name under
 `imported/`, so it must be letters, digits, dashes or underscores.
 
+If you omit `--pack`, the id is derived from **what is in the pack**, so a second pack never collides
+with your first: `<author-id>-<theme>` when exporting by theme, `<author-id>-all` for a whole-corpus
+export, and a slug of the title for an explicit list of findings.
+
 **Set a licence.** Findings are writing, and without a stated licence a recipient has no clear right to
 use or redistribute them. CC BY 4.0 is a reasonable default — it lets people build on your work while
 requiring they credit you. Whatever you choose, say it.

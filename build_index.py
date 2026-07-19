@@ -85,6 +85,24 @@ def casefold_key(text: str) -> bytes:
 
 # ── frontmatter ──────────────────────────────────────────────────────────────
 
+def unquote_scalar(value: str) -> str:
+    """
+    Strip surrounding quotes from a frontmatter scalar, honouring the escapes YAML
+    defines inside them. A title that quotes a phrase — title: "\\"False prophet\\"
+    collapses ..." — is valid YAML and common in this corpus; without unescaping,
+    the backslashes leak into INDEX.md and into every rendered link.
+
+    Falls back to the old strip-any-quote behaviour for unbalanced or bare values,
+    so nothing that parsed before parses differently now.
+    """
+    text = value.strip()
+    if len(text) >= 2 and text[0] == '"' and text[-1] == '"':
+        return text[1:-1].replace('\\"', '"').replace("\\\\", "\\")
+    if len(text) >= 2 and text[0] == "'" and text[-1] == "'":
+        return text[1:-1].replace("''", "'")  # YAML single-quoted doubles the quote
+    return text.strip("\"'")
+
+
 def parse_frontmatter(front: str) -> dict:
     """
     Parse the text between the leading and trailing `---` fences.
@@ -119,7 +137,7 @@ def parse_frontmatter(front: str) -> dict:
             if m.group(2) == "":
                 current_key = m.group(1)
             else:
-                meta[m.group(1)] = m.group(2).strip("\"'")
+                meta[m.group(1)] = unquote_scalar(m.group(2))
             continue
 
         if current_key is None:
@@ -137,12 +155,12 @@ def parse_frontmatter(front: str) -> dict:
         if m:
             if current_item is not None:
                 items.append(current_item)
-            current_item = {m.group(1): m.group(2).strip("\"'")}
+            current_item = {m.group(1): unquote_scalar(m.group(2))}
             continue
 
         m = re.match(r"^\s+([\w-]+):\s*(.*)$", line)
         if m and current_item is not None:
-            current_item[m.group(1)] = m.group(2).strip("\"'")
+            current_item[m.group(1)] = unquote_scalar(m.group(2))
             continue
 
     flush()
