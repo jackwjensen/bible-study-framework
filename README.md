@@ -201,6 +201,22 @@ Open questions that aren't claims yet live in `threads/<id>.md` with `status: op
 resolved`. Use one when a question is live but a verdict would be premature. Forcing a verdict early is
 the failure a thread exists to prevent.
 
+## Reading discipline — sense and tone
+
+Two failures the **reader** introduces, alongside the assistant-side guardrails in
+[`MODES.md`](MODES.md) and [`LIMITATIONS.md`](LIMITATIONS.md):
+
+- **Reader-supplied sense.** Disambiguating a multi-sense word is legitimate and often correct — and it
+  can dissolve *any* contradiction if applied without limit. **Corrective: does the text mark the split,
+  or does the reader?** (Romans 9:6; John 11:11-14; 1 Samuel 15:29; Proverbs 26:4-5.) Unmarked splits
+  get `claim_type: open`.
+- **Reader-supplied tone.** Writing carries *sense*, not *force*. Tone rests on convention rather than
+  grammar and does not survive into a text — it is available only where the **narrator** supplies it
+  (Luke 18:9; John 6:6; John 12:6). **Corrective: prefer distribution to tone**; where an argument needs
+  a tone, mark it `open` and name whose ear supplied it.
+
+Full text: [`MODES.md` → *Reading discipline*](MODES.md#reading-discipline--two-things-the-reader-supplies-without-noticing).
+
 ## What earns a place
 
 **Record your findings, not someone else's.** Reused material earns a file only when it is *load-bearing*

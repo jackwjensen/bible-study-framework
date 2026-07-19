@@ -105,6 +105,37 @@ Guardrails written as *instructions to the model* are self-policing by the entit
 hold under an attentive reader and fail under a trusting one. Converting them into **visible structure**
 is what survives the handoff to someone else.
 
+### Reading discipline — two things the reader supplies without noticing
+
+The constraints above cover the **assistant's** systematic failures. These two are **reading**
+failures — they affect any user of this framework, human or model — and they have the same shape as the
+others: **invisible in the output unless forced into view.**
+
+**1. Reader-supplied sense.** A large share of apparent contradiction is one word carrying several
+senses, and disambiguating is a legitimate and often correct move. But it can dissolve *any*
+contradiction if applied without limit. **The corrective: does the text mark the split, or does the
+reader?** Text-marked cases: Romans 9:6 ("they are not all Israel, which are of Israel"), John 11:11-14
+("Lazarus sleepeth" → "Jesus said plainly, Lazarus is dead"), 1 Samuel 15:29 ("he is not a *man*"),
+Proverbs 26:4-5's two *lest*-clauses, John 6:28-29. Where the text supplies no key, a proposed
+sense-split needs independent support and should be marked `open`. **A register of word-senses that only
+ever resolves things is doing something other than exegesis** — expect some entries to come back "no
+split; the tension is real."
+
+**2. Reader-supplied tone.** A written text carries *sense*; it does not carry *force*. Tone, irony,
+warmth and register are borne by voice and relationship, rest on **convention rather than grammar**, and
+**do not survive into writing**. Scripture supplies tone only where the **narrator** does — Luke 18:9
+("which trusted in themselves ... and despised others"), John 6:6 ("this he said to prove him"), John
+12:6 ("not that he cared for the poor"), John 11:51, Luke 9:33. Where that track is silent, readers fill
+it in from their own culture with unearned confidence: Matthew 15:26 ("the children's bread ... unto
+dogs") and John 2:4 ("Woman, what have I to do with thee?") both read as harsh in English and are
+tonally **unrecoverable**. **The corrective: prefer distribution to tone.** "Lord, Lord" occurs five
+times (Matthew 7:21, 7:22, 25:11; Luke 6:46, 13:25) and **every occurrence is a rejection scene** —
+which holds without anyone having to hear how it was said. Where an argument genuinely needs a tone,
+mark it `open` and name whose ear supplied it.
+
+Both are **reader** failures, so a recipient of shared findings must self-police them: there is no
+author-refusing-things loop on the receiving end.
+
 ## How the modes feed the corpus
 
 - **Bible Only** produces findings whose evidence is scripture-only — `sources:` stays scriptural (a
