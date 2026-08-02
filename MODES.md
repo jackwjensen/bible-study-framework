@@ -33,9 +33,14 @@ Theological work conducted from the biblical text alone.
 - Hebrew/Greek lexical tools are permitted but must be **flagged** when used — name the word, its range,
   and that a lexical judgment is being made.
 - Scripture-with-Scripture cross-reference is encouraged.
-- Extra-biblical cultural, historical, philosophical and systematic-theology material is minimized. If an
-  outside category is needed even to *frame* a question, **stop and say "I am now stepping outside the
-  text to do X"** before doing it — then return to the text.
+- **The borders are hard, not soft.** Inside Bible Only, external considerations carry **zero weight** on
+  what the text says: what critics, scholars, or a movement *say*; what is *politically correct* or
+  socially acceptable; what is *legal* under national law; and any other prudential concern. None of them
+  get a vote on the reading — they are admissible **only in Research or Debate**. (Flagged Hebrew/Greek
+  lexical/poetics tools remain permitted; Scripture-with-Scripture remains encouraged.) If an outside
+  category is needed even to *frame* a question, **stop and say "I am now stepping outside the text to do
+  X"** before doing it — then return to the text. Never dress external caution up as if it were the
+  text's own verdict.
 - **Do not pre-structure an enquiry around a known modern debate** or walk the text toward a known crux.
   Let findings emerge from reading rather than get steered toward a destination.
 - Do not supply unstated assumptions that make a text read more comfortably. If the text underdetermines
@@ -49,6 +54,34 @@ a value-laden gloss (reading "equal" where the text says only "both").
 A Bible Only enquiry is often followed by a **separately flagged** second step comparing its findings
 with historical/cultural/systematic theology — that step is explicitly *outside* Bible Only and must be
 labelled as such.
+
+### Why Bible Only excludes these — reading and applying are two separate acts
+
+This border looks severe out of context, so here is the reason in full. It is a rule about **honest
+input**, not a claim about ethics, obedience, or what anyone ought to do.
+
+Two different acts are involved, and the whole discipline depends on not collapsing them:
+
+1. **Reading** — *what does the text actually say?* A question of fact about the words on the page.
+2. **Applying** — *whether and how to live it out.* This is where national law, conscience, ethics,
+   wisdom, and circumstance legitimately and necessarily come in.
+
+External pressures belong, if anywhere, to step 2 — and **never** to step 1. The order is
+one-directional: you cannot honestly decide step 2 until step 1 has produced an **undistorted** reading.
+If fear of what a text might mean for step 2 is allowed to bend step 1, you have corrupted the only
+reliable input you had — you end up "deciding" about a text you never actually let speak.
+
+The point is sharpest with a deliberately extreme illustration. *If* the text said "force people into
+slavery," Bible Only reports that as-is. Reporting it is **not** endorsing it and **not yet** a
+decision — it is a refusal to lie about what is on the page. What you then do with it — judge it
+descriptive rather than prescriptive, historically bound, superseded, binding, or even wrong — is the
+entire, legitimate work of the application step, and **Research** and **Debate** modes exist for exactly
+that. Bible Only only guarantees that the step-2 argument is about **what the text really says**, not
+about a reading pre-shaped to be comfortable.
+
+So the exclusions are **not** a claim that law, ethics, or public sensibility do not matter. They matter
+enormously — at step 2. Bible Only keeps them out of step 1 so that, when they do their work, they have
+something *true* to act on.
 
 ## RESEARCH
 
