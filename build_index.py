@@ -85,6 +85,24 @@ def casefold_key(text: str) -> bytes:
 
 # ── frontmatter ──────────────────────────────────────────────────────────────
 
+def _is_scalar_item(item: str) -> bool:
+    """
+    Whether a block-list item is a plain value rather than a `- key: value` map.
+
+    A *quoted* item is always a scalar, however many colons it contains. Without
+    this, `- "Numbers 22:38"` matched neither the plain-item rule (it has a
+    colon) nor the map rule (it starts with a quote, not a word), and the line
+    was silently discarded — a `scripture:` list of seventeen refs survived as
+    one. Verse references are the single most common thing in this corpus to
+    write as a quoted block list, so the shape that got dropped was the shape
+    the corpus is made of.
+    """
+    text = item.strip()
+    if len(text) >= 2 and text[0] in "\"'" and text[-1] == text[0]:
+        return True
+    return ":" not in text
+
+
 def unquote_scalar(value: str) -> str:
     """
     Strip surrounding quotes from a frontmatter scalar, honouring the escapes YAML
@@ -144,11 +162,11 @@ def parse_frontmatter(front: str) -> dict:
             continue
 
         m = re.match(r"^\s+-\s+(.+)$", line)
-        if m and ":" not in m.group(1):
+        if m and _is_scalar_item(m.group(1)):
             if current_item is not None:
                 items.append(current_item)
                 current_item = None
-            items.append(m.group(1).strip("\"' "))
+            items.append(unquote_scalar(m.group(1)))
             continue
 
         m = re.match(r"^\s+-\s+([\w-]+):\s*(.*)$", line)
@@ -189,7 +207,16 @@ def load_content(path: Path) -> dict | None:
 
 
 def split_scalar(scalar: str) -> list[str]:
-    """Split one scalar (possibly an inline "[a, b]" list) into trimmed tokens."""
+    """
+    Split one scalar (possibly an inline "[a, b]" list) into trimmed tokens.
+
+    Commas *inside quotes* do not split. A plain `scalar.split(",")` fragmented
+    every entry that contained a comma — one `sources:` citation became five
+    nonsense ones — and citations contain commas as a matter of course
+    ("Wenham, Genesis 1-15"). A quote only opens a token when it is the first
+    character of that token, so an apostrophe inside an unquoted word ("God's")
+    stays an apostrophe rather than swallowing the rest of the line.
+    """
     scalar = scalar.strip()
     if scalar == "":
         return []
@@ -197,12 +224,34 @@ def split_scalar(scalar: str) -> list[str]:
         scalar = scalar[1:-1]
     if scalar.strip() == "":
         return []
-    tokens = []
-    for part in scalar.split(","):
-        part = part.strip().strip("\"'").strip()
-        if part != "":
-            tokens.append(part)
-    return tokens
+
+    tokens: list[str] = []
+    current: list[str] = []
+    quote: str | None = None
+    index = 0
+    while index < len(scalar):
+        character = scalar[index]
+        if quote is not None:
+            if character == "\\" and quote == '"' and index + 1 < len(scalar):
+                current.append(scalar[index + 1])
+                index += 2
+                continue
+            if character == quote:
+                quote = None
+            else:
+                current.append(character)
+        elif character in "\"'" and "".join(current).strip() == "":
+            quote = character
+            current = []
+        elif character == ",":
+            tokens.append("".join(current))
+            current = []
+        else:
+            current.append(character)
+        index += 1
+    tokens.append("".join(current))
+
+    return [token.strip() for token in tokens if token.strip() != ""]
 
 
 def normalize_list(value) -> list[str]:
@@ -216,7 +265,12 @@ def normalize_list(value) -> list[str]:
         for item in value:
             if isinstance(item, dict):
                 continue  # typed map items are not used in study frontmatter
-            out.extend(split_scalar(str(item)))
+            # A block list has already said where its items begin and end, so
+            # its entries are taken whole. Re-splitting them on commas was how
+            # a single "Wenham, Genesis 1-15" source became two.
+            text = str(item).strip()
+            if text != "":
+                out.append(text)
     elif isinstance(value, str):
         out.extend(split_scalar(value))
     else:
