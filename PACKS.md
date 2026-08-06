@@ -26,6 +26,9 @@ That is the same rule the framework already applies to any borrowed material: it
 is load-bearing for something of yours, and not otherwise. An imported finding that never earns an edge
 is visible dead weight you can drop.
 
+An imported id **is** a valid edge and `[[wikilink]]` target from your own findings and threads, which
+is what makes the rule above workable rather than merely stated.
+
 Imported findings live in a separate namespace and are **not validated** against your corpus — their
 internal edges point at ids inside their own pack, which you may not have. `--check` ignores them.
 

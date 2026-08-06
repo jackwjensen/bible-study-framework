@@ -428,13 +428,23 @@ def load_threads() -> dict:
 
 # ── validation ───────────────────────────────────────────────────────────────
 
-def validate(findings: dict, themes: dict, threads: dict) -> tuple[list[str], list[str]]:
+def validate(findings: dict, themes: dict, threads: dict,
+             imported: list[dict] | None = None) -> tuple[list[str], list[str]]:
     """Validate the corpus. Returns (errors, notices); only errors fail --check."""
     errors: list[str] = []
     notices: list[str] = []
     ids = list(findings.keys())
+    # An imported finding is a legitimate thing to point at. PACKS.md tells you
+    # to use one by writing your own finding that builds_on or tension_with it,
+    # so refusing that edge would make --check reject the documented workflow.
+    # They remain read-only and in their own namespace — what changes here is
+    # only that your own findings may *reference* them.
+    imported_ids = {
+        entry["id"] for pack in (imported or []) for entry in pack["findings"]
+    }
+    edge_targets = set(ids) | imported_ids
     # [[wikilinks]] may point to a finding OR a thread.
-    link_targets = set(ids) | set(threads.keys())
+    link_targets = edge_targets | set(threads.keys())
 
     for finding_id, finding in findings.items():
         where = finding["file"]
@@ -462,7 +472,7 @@ def validate(findings: dict, themes: dict, threads: dict) -> tuple[list[str], li
 
         for edge_field in ("related", "builds_on", "tension_with"):
             for target in finding[edge_field]:
-                if target not in findings:
+                if target not in edge_targets:
                     errors.append(
                         f"{where}: {edge_field} references unknown finding id '{target}'")
 
@@ -494,7 +504,7 @@ def validate(findings: dict, themes: dict, threads: dict) -> tuple[list[str], li
                 f"{where}: frontmatter id '{declared_id}' does not match filename id '{thread_id}'")
 
         for target in thread["related"]:
-            if target not in findings:
+            if target not in edge_targets:
                 errors.append(f"{where}: related references unknown finding id '{target}'")
         for target in thread["wikilinks"]:
             if target not in link_targets:
@@ -777,8 +787,12 @@ def load_imported() -> list[dict]:
     """
     Load packs received from other people (see PACKS.md). These are read-only
     reference material in a *separate namespace* — their internal edges point at
-    ids inside their own pack, so they are listed but never validated against,
-    nor merged into, your own findings.
+    ids inside their own pack, so they are never validated themselves, nor
+    merged into your own findings.
+
+    Your own findings *may* point at them: PACKS.md tells you to use an import
+    by writing your own finding that builds_on or tension_with it, so those ids
+    are valid edge and [[wikilink]] targets. See validate().
     """
     packs = []
     if not IMPORTED_DIR.exists():
@@ -880,7 +894,7 @@ def main(argv: list[str]) -> int:
     themes = load_themes()
     threads = load_threads()
     imported = load_imported()
-    errors, notices = validate(findings, themes, threads)
+    errors, notices = validate(findings, themes, threads, imported)
 
     # Windows consoles default to a legacy codepage; the corpus is full of
     # em-dashes, Greek and Hebrew. Force UTF-8 so reporting never crashes.
