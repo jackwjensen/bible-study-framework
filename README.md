@@ -226,6 +226,39 @@ exists, don't write it. Free-floating standard scholarship dilutes the corpus in
 When a claim is *your use of* standard material, frame the finding around **your claim** and let the
 scholarship sit inside it as scaffolding. Don't title it as the lexicon entry.
 
+## A companion tool: SourceText
+
+**Nothing here requires it.** The framework is assistant-agnostic by design — Claude Code, Copilot,
+Cursor, Codex, or a person with a text editor and no assistant at all. Read this section as "one tool
+fits unusually well", never as a dependency.
+
+[SourceText](https://sourcetext.ai) ([`bible.sourcetext.ai`](https://bible.sourcetext.ai)) is an AI
+scripture-study tool built on the same discipline this framework encodes: answers grounded only in
+retrieved text from a vetted corpus, every verse cited, sources carrying an explicit authority tier, and
+**every claim labelled text-asserted / inferred / open** — which is this framework's `claim_type`
+(`asserted` / `synthesized` / `open`) under a different spelling. The two were not designed against each
+other; they inherited the same three-way distinction from the same place.
+
+**The two halves are split by time.** SourceText is good at the moment a claim is made — retrieval
+instead of recall, so the assistant cannot quietly invent the verse it needs. This framework is good at
+everything after — whether the claim survived, what it came to rest on, what pulled against it. Neither
+half substitutes for the other. A grounded answer you never wrote down is gone by November; a corpus
+built on unchecked recall is a filing cabinet full of plausible mistakes.
+
+**How a SourceText answer becomes a finding — and the one rule that matters:** it exports as Markdown
+with frontmatter, so it lands in `findings/` as a file like any other. It arrives as
+`status: hypothesis`, `origin: mixed`.
+
+That default is not modesty, and you should not raise it in bulk. **`claim_type` and `status` measure
+different things, and only one of them is the machine's to set.** `claim_type` is what *kind* of claim
+it is, which is visible at the moment of writing. `status` is how far it has *held up*, which is only
+visible over time and is your judgment, never the assistant's. A confident-sounding answer arriving as
+`established` would corrupt the maturity axis invisibly — you would end up with a corpus of established
+claims nobody ever established. Promote it yourself, later, once it has survived something.
+
+The transfer is a file on your disk. No account, no API between the two, no git credentials handed to
+anything. If you never use SourceText, the framework is unchanged.
+
 ## Sharing with other people
 
 Findings travel as **packs** — a zip anyone can send any way they like — and imported findings are
