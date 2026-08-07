@@ -28,21 +28,44 @@ from typing import Iterable, Optional
 
 from standards_core import COMPOSE_FILENAME, Violation  # noqa: F401  (re-exported)
 
-# The host's port space is shared between every project on the machine, so these are
-# assigned rather than chosen. See claude/rules/infrastructure.md for the reasoning.
+# THE FEATURE DEFINES THE PORT, not the implementation behind it. Every app answers on
+# 8080 whether it is PHP behind nginx, Blazor, or a Vite dev server; the admin surface is
+# 8081 whether it is Django, a second SPA, or a marketing site. One number per job, so a
+# browser bookmark keeps working across projects.
 #
-#   8080        every app's primary entry point, and where the Cloudflare tunnel points
-#   8081-8083   further web surfaces in the same stack
-#   8025/1025   MailHog's own defaults: browsable inbox, and the SMTP the app delivers to
-ALLOWED_PUBLISHED_PORTS = frozenset({8080, 8081, 8082, 8083, 8025, 1025})
+# Only one app is expected to run at a time -- running two is not a supported case, and
+# these numbers deliberately do not try to make it one.
+#
+#   8080   frontend / the app's main entry point (and where the Cloudflare tunnel points)
+#   8081   backend / admin / API / a second web surface
+#   1080   mail catcher, browsable inbox
+#   1025   mail catcher, the SMTP endpoint the app delivers to
+ALLOWED_PUBLISHED_PORTS = frozenset({8080, 8081, 1080, 1025})
 
-# Datastores are published off their default port, so a container never fights a natively
-# installed server, and on loopback only. The value is the name used in the message.
-LOOPBACK_ONLY_PORTS = {3307: "MySQL", 5433: "PostgreSQL", 6380: "Redis", 27018: "MongoDB"}
+# Datastores publish off their default port, and on loopback only. Same principle: 3307 is
+# "the app's database" whatever the engine, so one saved connection in a DB client serves
+# every project.
+#
+# Measured on this machine: the standalone MySQL80 service runs on 3360 and Herd's bundled
+# MySQL on 3309 -- both already moved off 3306 by hand. 3306 is therefore free today only
+# because two hand-edited configs say so, and a reinstall or upgrade resets either to the
+# default. Publishing a container there would be betting on that.
+LOOPBACK_ONLY_PORTS = {3307: "the app database", 6380: "Redis"}
 
-# Default datastore ports. Publishing one at all is the collision that started this rule:
-# two repos both took 3306 and could not run at the same time.
-DEFAULT_DATASTORE_PORTS = frozenset({3306, 5432, 6379, 27017, 1433})
+# A datastore's own default port, mapped to where it belongs instead: the assigned host
+# port for that FEATURE, and the words for it. Publishing one of these at all is the
+# collision that started this rule -- two repos both took 3306 and could not run together.
+#
+# Every database engine points at the same 3307, deliberately: the feature is "the app's
+# database", not "MySQL". A cache is a different feature and gets its own number, which is
+# why this is a mapping rather than a set -- a set told Redis to become the app database.
+DEFAULT_DATASTORE_PORTS = {
+    3306: (3307, "the app's database"),
+    5432: (3307, "the app's database"),
+    1433: (3307, "the app's database"),
+    27017: (3307, "the app's database"),
+    6379: (6380, "the cache / broker"),
+}
 
 # A published port in either short or long form:
 #   - "8080:80"                 host 8080
@@ -82,28 +105,25 @@ def check_compose_ports(path: Path, lines: list[str]) -> Iterable[Violation]:
                 ),
             )
         elif host_port in DEFAULT_DATASTORE_PORTS:
-            suggestion = next(
-                (port for port, _ in LOOPBACK_ONLY_PORTS.items() if port == host_port + 1),
-                host_port + 1,
-            )
+            assigned, feature = DEFAULT_DATASTORE_PORTS[host_port]
             yield Violation(
                 path=path, line=line_number, rule="compose-port",
                 message=(
-                    f"port {host_port} is a datastore's DEFAULT port. Publish it off the "
-                    f'default and on loopback -- "127.0.0.1:{suggestion}:{host_port}" -- so '
-                    f"it fights neither a natively installed server nor another repo that "
-                    f"made the same choice. See .claude/rules/infrastructure.md."
+                    f"port {host_port} is a datastore's DEFAULT port. Publish {feature} on "
+                    f'"127.0.0.1:{assigned}:{match.group("container")}" whatever the engine '
+                    f"behind it, so one saved connection serves every project. On this "
+                    f"machine 3306 is free only because MySQL80 (3360) and Herd's MySQL "
+                    f"(3309) were both moved off it by hand, and a reinstall resets either."
                 ),
             )
         elif not is_loopback and host_port not in ALLOWED_PUBLISHED_PORTS:
-            allowed = ", ".join(str(port) for port in sorted(ALLOWED_PUBLISHED_PORTS))
             yield Violation(
                 path=path, line=line_number, rule="compose-port",
                 message=(
-                    f"host port {host_port} is not assigned. The app's entry point is 8080 "
-                    f"(where the Cloudflare tunnel points), further web surfaces are "
-                    f"8081-8083, and MailHog keeps its own 8025/1025. Assigned: {allowed}. "
-                    f"A datastore goes on loopback instead."
+                    f"host port {host_port} is not assigned. The feature defines the port: "
+                    f"8080 frontend / main entry, 8081 backend / admin / second surface, "
+                    f"1080 mail inbox, 1025 mail SMTP. A datastore goes on "
+                    f"127.0.0.1:3307 instead. See .claude/rules/infrastructure.md."
                 ),
             )
 
