@@ -42,6 +42,7 @@ from standards_checks import (  # noqa: E402  (path must be set before the impor
     check_source_file,
     should_check,
 )
+from standards_core import file_length_exemption  # noqa: E402  (same reason)
 
 
 def violation_key(violation: Violation, repo_root: Path) -> str:
@@ -101,6 +102,30 @@ def collect_violations(root: Path, config: CheckConfig, baseline: dict[str, int]
         violations.extend(check_source_file(path, lines, config, baseline, root))
 
     return violations
+
+
+def collect_length_exemptions(root: Path, config: CheckConfig) -> list[tuple[str, int, str]]:
+    """(path, line count, stated reason) for every file exempted from the length limit.
+
+    Collected so the summary can NAME them. An exemption nobody sees is just a baseline
+    with better manners: the value of putting the marker in the file is that somebody
+    reviewing the repo can read the argument and disagree with it.
+    """
+    exempt: list[tuple[str, int, str]] = []
+
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or not should_check(path, root, config):
+            continue
+
+        lines = read_source_lines(path)
+        if lines is None or len(lines) <= config.max_file_lines:
+            continue
+
+        reason = file_length_exemption(lines)
+        if reason is not None:
+            exempt.append((path.relative_to(root).as_posix(), len(lines), reason))
+
+    return exempt
 
 
 def report(violations: list[Violation], root: Path, output_format: str) -> None:
@@ -195,8 +220,17 @@ def main(argv: list[str]) -> int:
     grandfathered = [v for v in violations if violation_key(v, root) in known_violations]
     remaining = [v for v in violations if violation_key(v, root) not in known_violations]
 
+    exemptions = collect_length_exemptions(root, config)
+    for relative, line_count, reason in exemptions:
+        print(f"exempt: {relative} ({line_count} lines) -- {reason}")
+
     if not remaining:
-        suffix = f" ({len(grandfathered)} grandfathered)" if grandfathered else ""
+        notes = []
+        if grandfathered:
+            notes.append(f"{len(grandfathered)} grandfathered")
+        if exemptions:
+            notes.append(f"{len(exemptions)} length-exempt")
+        suffix = f" ({', '.join(notes)})" if notes else ""
         print(f"check-source-limits: clean{suffix}")
         return 0
 

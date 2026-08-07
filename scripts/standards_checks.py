@@ -100,6 +100,11 @@ ANONYMOUS_TYPE_MARKER = re.compile(r"new\s*\{")
 # The zero-like sentinel family (unset-not-zero, payload-default and the per-language
 # coalesce patterns) lives in standards_sentinels.py. Re-exported so the dispatcher below
 # and any caller importing from standards_checks keep working unchanged.
+from standards_compose import (  # noqa: E402  (kept beside the other rule definitions)
+    COMPOSE_FILENAME,
+    check_compose_container_names,
+    check_compose_ports,
+)
 from standards_sentinels import (  # noqa: E402  (kept beside the other rule definitions)
     CSHARP_ZERO_COALESCE,
     JS_ZERO_COALESCE,
@@ -284,6 +289,15 @@ def check_source_file(
     repo_root: Path,
 ) -> Iterable[Violation]:
     """Every check that applies to one file, dispatched by language."""
+    # Compose files are in scope for the shared-state rules only. Length and the source
+    # rules are meaningless for them, and running the length rule would flag long but
+    # entirely reasonable stack definitions.
+    if COMPOSE_FILENAME.match(path.name):
+        if config.check_compose_conventions:
+            yield from check_compose_ports(path, lines)
+            yield from check_compose_container_names(path, lines)
+        return
+
     yield from check_file_length(path, lines, config, baseline, repo_root)
 
     if path.suffix in (".cs", ".razor"):
