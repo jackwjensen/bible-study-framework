@@ -77,7 +77,10 @@ the assistant re-invents your conclusions with fresh drift each time. With one, 
 | [`MODES.md`](MODES.md) | The operating modes (Bible Only / Research / Debate) and the output discipline |
 | [`AGENTS.md`](AGENTS.md) | Instructions your assistant reads. `CLAUDE.md`, `GEMINI.md` and `.github/copilot-instructions.md` point here |
 | [`PACKS.md`](PACKS.md) | Sharing findings with other people, and subscribing to theirs |
-| [`build_index.py`](build_index.py) | Regenerates `INDEX.md`; `--check` validates the corpus |
+| [`build_index.py`](build_index.py) | Regenerates `INDEX.md`; `--check` validates the corpus. The only entry point |
+| [`study_corpus.py`](study_corpus.py) | Vocabularies, the frontmatter parser, and the loaders. Import from here |
+| [`study_sections.py`](study_sections.py) | Renders loaded records into `INDEX.md`'s Markdown sections |
+| [`packs.py`](packs.py) | Export findings for someone else; import and subscribe to theirs |
 | `findings/` | One atomic claim per file. Yours. Starts empty |
 | `threads/` | Open questions that aren't settled claims yet |
 | `themes/` | Optional hub pages grouping findings by topic |
@@ -111,6 +114,12 @@ python build_index.py --check  # validate only; exits non-zero on errors
 
 Already installed on macOS and Linux. On Windows: `winget install Python.Python.3.12`, or let your
 assistant do it.
+
+`build_index.py` is the only entry point, but the work is split across three modules so each has one
+job: **`study_corpus.py`** owns the vocabularies, the frontmatter parser and the loaders;
+**`study_sections.py`** renders records into Markdown; **`build_index.py`** is validation plus the CLI.
+Anything that needs to *read* the corpus imports from `study_corpus` — that is what `packs.py` does.
+Nothing should import from `build_index`.
 
 `--check` fails on broken `[[wikilinks]]`, unknown edge ids, duplicate ids, missing required fields, and
 invalid `status` / `claim_type` / `origin` values. Run it before every commit — it's what stops the

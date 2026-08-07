@@ -29,7 +29,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from build_index import load_content, normalize_list
+from study_corpus import load_content, normalize_list
 
 ROOT = Path(__file__).resolve().parent
 FINDINGS_DIR = ROOT / "findings"

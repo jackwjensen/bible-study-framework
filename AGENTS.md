@@ -97,6 +97,37 @@ Findings received from other people live in `imported/<author>/` and are **read-
 [`PACKS.md`](PACKS.md). Never edit them, never move them into `findings/`, and never re-stamp their
 origin. To use one, help the user write *their own* finding that `builds_on` or `tension_with` it.
 
+## Engineering standards (for anyone editing the tooling, not the corpus)
+
+The Python under `build_index.py` / `packs.py` / `study_corpus.py` / `study_sections.py` is
+checked by the shared standards pack. **This only concerns changes to the *code*** — writing
+findings and threads is unaffected.
+
+```bash
+python scripts/check-source-limits.py --root .
+```
+
+- `scripts/` holds one tool split four ways — `check-source-limits.py` (driver),
+  `standards_checks.py` (per-language patterns), `standards_sentinels.py` (`unset-not-zero`,
+  `payload-default`) and `standards_core.py` (shared vocabulary), plus `precommit-gate.py`.
+  They import each other from the same directory, so **copy all four or none**; a partial copy
+  fails as an `ImportError` at commit time.
+- **There is no baseline file, and there must not be one.** Every file meets the limits
+  outright, so the checker passes from a clean slate and any failure belongs to the change
+  under test. When a file crosses 500 lines, name its second responsibility and split it —
+  that is exactly how `study_corpus.py` and `study_sections.py` came out of `build_index.py`.
+- `.claude/rules/` carries the judgment half, auto-loaded by path. It is copied verbatim from
+  the pack and covers stacks this repo does not use; that is deliberate — an edited copy would
+  drift from its source, which is the failure the pack exists to prevent.
+- `.claude/settings.json` installs a `PreToolUse` hook that blocks `git commit` while the gates
+  are red. Escape hatch: `SKIP_STANDARDS_GATE=1`, only when the failure is provably unrelated.
+- CI runs the same check before validating the corpus.
+
+**The tooling is mirrored, not shared** (see the note in `CONTRIBUTING.md`): these four modules
+also live in Jack's private corpus repo, and the only intended difference is the `origin` author
+slot — `own` here, the author's name there. A fix to one must be ported to the other, or the two
+definitions of "valid" drift apart.
+
 ## Housekeeping the user cannot do themselves
 
 They may not know git. Periodically, without being asked:

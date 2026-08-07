@@ -34,6 +34,12 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Engineering standards: file length, unset-not-zero, payload-default, date ranges.
+      # There is no baseline file — this repo carries no adoption debt, so any violation
+      # here was introduced by the change under test rather than inherited.
+      - name: Source limits
+        run: python scripts/check-source-limits.py --root . --format github
+
       - name: Validate the corpus
         run: python build_index.py --check
 

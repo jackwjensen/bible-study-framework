@@ -2,6 +2,22 @@
 *.sqlite
 *.sqlite3
 
+# Python bytecode. New since the tooling was split into modules: a single-file script
+# imports nothing local and so never produced one, but build_index.py now imports
+# study_corpus/study_sections and Python caches them next to the source.
+__pycache__/
+*.pyc
+
+# Claude Code. The commit gate and the standards rules ARE versioned; only the
+# machine-specific bits (permissions, worktrees) stay local. The global gitignore
+# excludes .claude/ wholesale, and git cannot re-include a file whose parent directory
+# is excluded, so the directory has to be un-excluded first — and the un-exclude must
+# come before the `.claude/*` line, because the LAST matching rule wins.
+!.claude/
+.claude/*
+!.claude/settings.json
+!.claude/rules/
+
 # Editor / OS noise
 .DS_Store
 Thumbs.db
