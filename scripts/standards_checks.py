@@ -11,7 +11,8 @@ One tool, four files, each changing for its own reason:
 The core names are re-exported below so `from standards_checks import CheckConfig` keeps
 working for the driver.
 
-Rules here: bool-prefix, money-not-decimal, date-sentinel, date-out-of-range, razor-var,
+Rules here: mojibake (via standards_encoding), bool-prefix, money-not-decimal, date-sentinel,
+date-out-of-range, razor-var,
 php-strict-types. unset-not-zero and payload-default live in standards_sentinels.py and
 are re-exported for the dispatcher.
 
@@ -33,6 +34,7 @@ from standards_core import (  # noqa: F401  (CheckConfig/Violation re-exported f
     is_money_name,
     iter_code_lines,
 )
+from standards_encoding import check_mojibake
 from standards_query import check_filter_in_memory, check_query_shape
 from standards_scope import SCRIPT_SUFFIXES, should_check  # noqa: F401  (re-exported)
 
@@ -317,6 +319,11 @@ def check_source_file(
         return
 
     yield from check_file_length(path, lines, config, baseline, repo_root)
+
+    # Language-agnostic on purpose: corruption does not care what the file is, and the case
+    # that shipped was a Danish string literal in C#. Runs before the language dispatch so a
+    # mangled file is reported even when no other rule applies to it.
+    yield from check_mojibake(path, lines)
 
     # The data-access rules cover every language that can hold a query builder, including
     # the two that do not have one in this estate yet -- see standards_query.py.
