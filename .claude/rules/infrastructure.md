@@ -100,7 +100,74 @@ service key and a replica counter. `docker logs allegroit-dk-web` works on the s
 fails on the laptop, and a runbook cannot name a container that only exists in one place.
 
 `COMPOSE_PROJECT_NAME` is set in `.env` and is the site's identity, not the folder's —
-`jackscorner-dk` for the repo `jacks_corner`, because the deployed thing is the site.
+`jackscorner-dk` for the repo `jacks_corner`, because the deployed thing is the site. **Give it a
+default in the compose file** — `${COMPOSE_PROJECT_NAME:-invotrack}-web` — because a repo with no
+`.env` in development expands the bare form to nothing and names the container `-web`.
+
+### The service name is on the shared proxy network too
+
+A stack that joins `nginx-proxy-network` registers **both** its `container_name` and its *service
+name* as DNS aliases there. So a service called `web` publishes the alias `web` onto a network
+shared with every other site — and allegroit-dk, jacks_corner and wappit.net all have one.
+Whichever answers is undefined.
+
+Nginx Proxy Manager currently avoids this by targeting the container name
+(`allegroit-dk-web:80`, `jackscorner-dk-web:80`), while pointing at the *service* name for the
+stacks whose service happens to be unique (`invotrack:8080`, `donorlink:8080`). Both work; the
+mix is what makes it fragile, because the two names are guaranteed identical only when someone
+keeps them so.
+
+**Name the service what you want the container called** — `sourcetext-web`, `sourcetext-api`,
+`sourcetext-db` — so `container_name`, the service alias and the NPM target are one string with
+no way to drift. That is what sourcetext.ai does, and it is why renaming a container there
+cannot break routing.
+
+Write `container_name` as a **literal**, not `${COMPOSE_PROJECT_NAME}-web`. The point is one
+string; an interpolation is a second source of truth that a wrong `.env` can desynchronise from
+the service key.
+
+**Only proxy-facing services need the unified name.** The collision this fixes is on
+`nginx-proxy-network`, so it applies to the service that joins it — the web one. A `mysql`,
+`redis` or `mailhog` service lives on the project's own `default` network, which is per-project
+and cannot collide, so it keeps its short generic key and only needs a distinct
+`container_name` for `docker ps` to be readable. **Do not rename an internal service for
+tidiness**: the service key *is* the DNS name its siblings connect to, so renaming `mysql` to
+`donorlink-db` breaks every `Server=mysql;…` connection string in the stack for no benefit.
+
+### Renaming a service breaks the next deploy unless you clear the old container first
+
+Found by doing it. Compose identifies a container by its **service key**, so the moment the key
+changes the running container becomes an *orphan* — Compose no longer recognises it, but Docker
+still holds its `container_name`. The next `up` dies on:
+
+```
+Conflict. The container name "/jackscorner-dk-web" is already in use by container ...
+```
+
+**`--remove-orphans` does not save you.** Measured: `docker compose up -d --force-recreate
+--remove-orphans` begins removing the orphan and then races its own create, failing with the
+same conflict. The removal has to complete as its own step:
+
+```bash
+docker compose down --remove-orphans   # separate command, must finish first
+docker compose up -d
+```
+
+That is a **one-time** step for the deploy that carries the rename, and it means brief downtime
+— so it belongs in `PUBLISH_NOTES.md` rather than in the deploy workflow, which would otherwise
+tear the site down on *every* future deploy.
+
+### When one repo deploys as several instances, the names cannot unify — and should not
+
+WAPPIT serves both `api.wappit.net` and `staging-api.wappit.net` from one repo, distinguished by
+`COMPOSE_PROJECT_NAME` (`wappit-api` / `wappit-api-staging`). Its `container_name` is therefore
+`${COMPOSE_PROJECT_NAME:-wappit-api}-api`, which differs per instance, while the service key is
+a single static `api`. No one string can be all three.
+
+That is correct, not a gap: the container name is the only one of the three that *can* carry the
+instance, so **NPM must target the container name** — which it does. The rule is one string
+wherever one string is possible; where a repo has more than one deployment, the interpolated
+`container_name` is the discriminator and the service key stays generic.
 
 ## The two-file compose convention
 

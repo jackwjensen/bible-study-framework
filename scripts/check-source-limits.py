@@ -12,10 +12,13 @@ This half is the driver: walking the tree, ratcheting the baseline, reporting, C
 
 Checks: file-too-long, baseline-grew, bool-prefix, money-not-decimal,
 unset-not-zero, payload-default, date-sentinel, date-out-of-range, razor-var,
-php-strict-types. unset-not-zero and the date rules are the mechanical half of
-"unset is null" and "dates declare a sensible range"; payload-default is a
-separate rule about missing external data rather than about null-versus-zero.
-The judgment halves stay prose in claude/rules/*-standards.md.
+php-strict-types, query-shape, plus the deployment-contract family (compose-port,
+compose-container-name, compose-overlay-name, deploy-gate, env-example-compose).
+unset-not-zero and the date rules are the mechanical half of "unset is null" and
+"dates declare a sensible range"; payload-default is a separate rule about missing
+external data rather than about null-versus-zero; query-shape is a smoke alarm for
+an ORM query that has taken on a shape a database view should own.
+The judgment halves stay prose in claude/rules/*.md.
 
 Usage:
     python check-source-limits.py [--root DIR] [--config FILE] [--format github]
@@ -40,9 +43,10 @@ from standards_checks import (  # noqa: E402  (path must be set before the impor
     CheckConfig,
     Violation,
     check_source_file,
-    should_check,
 )
-from standards_core import file_length_exemption  # noqa: E402  (same reason)
+from standards_exemptions import exemption_reason, file_length_exemption  # noqa: E402
+from standards_query import check_query_shape  # noqa: E402  (same reason)
+from standards_scope import should_check  # noqa: E402  (same reason)
 
 
 def violation_key(violation: Violation, repo_root: Path) -> str:
@@ -104,26 +108,40 @@ def collect_violations(root: Path, config: CheckConfig, baseline: dict[str, int]
     return violations
 
 
-def collect_length_exemptions(root: Path, config: CheckConfig) -> list[tuple[str, int, str]]:
-    """(path, line count, stated reason) for every file exempted from the length limit.
+def collect_exemptions(root: Path, config: CheckConfig) -> list[tuple[str, str, str]]:
+    """(path, rule, stated reason) for every exemption that is actually load-bearing.
 
     Collected so the summary can NAME them. An exemption nobody sees is just a baseline
     with better manners: the value of putting the marker in the file is that somebody
     reviewing the repo can read the argument and disagree with it.
+
+    "Load-bearing" means the file would report a finding without its marker. A marker left
+    on a file whose query was since rewritten, or which has since been split under the line
+    limit, is stale rather than a decision, and printing it would train people to skim past
+    the list.
     """
-    exempt: list[tuple[str, int, str]] = []
+    exempt: list[tuple[str, str, str]] = []
 
     for path in sorted(root.rglob("*")):
         if not path.is_file() or not should_check(path, root, config):
             continue
 
         lines = read_source_lines(path)
-        if lines is None or len(lines) <= config.max_file_lines:
+        if lines is None:
             continue
 
-        reason = file_length_exemption(lines)
-        if reason is not None:
-            exempt.append((path.relative_to(root).as_posix(), len(lines), reason))
+        relative = path.relative_to(root).as_posix()
+
+        if len(lines) > config.max_file_lines:
+            reason = file_length_exemption(lines)
+            if reason is not None:
+                exempt.append((relative, f"file-length, {len(lines)} lines", reason))
+
+        if config.check_query_shape and path.suffix in (".cs", ".razor", ".py"):
+            query_reason = exemption_reason(lines, "query-shape")
+            would_fire = any(check_query_shape(path, lines, config, respect_exemption=False))
+            if query_reason is not None and would_fire:
+                exempt.append((relative, "query-shape", query_reason))
 
     return exempt
 
@@ -220,16 +238,16 @@ def main(argv: list[str]) -> int:
     grandfathered = [v for v in violations if violation_key(v, root) in known_violations]
     remaining = [v for v in violations if violation_key(v, root) not in known_violations]
 
-    exemptions = collect_length_exemptions(root, config)
-    for relative, line_count, reason in exemptions:
-        print(f"exempt: {relative} ({line_count} lines) -- {reason}")
+    exemptions = collect_exemptions(root, config)
+    for relative, rule, reason in exemptions:
+        print(f"exempt: {relative} [{rule}] -- {reason}")
 
     if not remaining:
         notes = []
         if grandfathered:
             notes.append(f"{len(grandfathered)} grandfathered")
         if exemptions:
-            notes.append(f"{len(exemptions)} length-exempt")
+            notes.append(f"{len(exemptions)} exempt")
         suffix = f" ({', '.join(notes)})" if notes else ""
         print(f"check-source-limits: clean{suffix}")
         return 0

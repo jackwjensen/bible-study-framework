@@ -24,17 +24,17 @@ import re
 from pathlib import Path
 from typing import Iterable, Optional
 
-from standards_core import (  # noqa: F401  (CheckConfig/Violation/should_check re-exported for the driver)
+from standards_core import (  # noqa: F401  (CheckConfig/Violation re-exported for the driver)
     BOOLEAN_PREFIXES,
     MIN_PLAUSIBLE_YEAR,
-    SCRIPT_SUFFIXES,
     CheckConfig,
     Violation,
     check_file_length,
     is_money_name,
     iter_code_lines,
-    should_check,
 )
+from standards_query import check_filter_in_memory, check_query_shape
+from standards_scope import SCRIPT_SUFFIXES, should_check  # noqa: F401  (re-exported)
 
 # public/protected/internal bool Foo { get; set; }  -- captures the member name.
 CSHARP_BOOL_MEMBER = re.compile(
@@ -102,8 +102,13 @@ ANONYMOUS_TYPE_MARKER = re.compile(r"new\s*\{")
 # and any caller importing from standards_checks keep working unchanged.
 from standards_compose import (  # noqa: E402  (kept beside the other rule definitions)
     COMPOSE_FILENAME,
+    ENV_EXAMPLE_FILENAME,
     check_compose_container_names,
     check_compose_ports,
+    check_deploy_gate,
+    check_env_example,
+    check_overlay_name,
+    is_workflow,
 )
 from standards_sentinels import (  # noqa: E402  (kept beside the other rule definitions)
     CSHARP_ZERO_COALESCE,
@@ -289,16 +294,35 @@ def check_source_file(
     repo_root: Path,
 ) -> Iterable[Violation]:
     """Every check that applies to one file, dispatched by language."""
-    # Compose files are in scope for the shared-state rules only. Length and the source
-    # rules are meaningless for them, and running the length rule would flag long but
-    # entirely reasonable stack definitions.
+    # Compose files, workflows and .env.example are in scope for the deployment-contract
+    # rules only. Length and the source rules are meaningless for them, and running the
+    # length rule would flag long but entirely reasonable stack definitions.
     if COMPOSE_FILENAME.match(path.name):
         if config.check_compose_conventions:
             yield from check_compose_ports(path, lines)
             yield from check_compose_container_names(path, lines)
+            yield from check_overlay_name(path, lines)
+        return
+
+    if ENV_EXAMPLE_FILENAME.match(path.name):
+        # Only meaningful for a repo that actually ships as a compose stack; a library or
+        # a docs repo has no COMPOSE_FILE to document.
+        if config.check_compose_conventions and (repo_root / "docker-compose.yml").is_file():
+            yield from check_env_example(path, lines)
+        return
+
+    if is_workflow(path, repo_root):
+        if config.check_compose_conventions:
+            yield from check_deploy_gate(path, lines)
         return
 
     yield from check_file_length(path, lines, config, baseline, repo_root)
+
+    # The data-access rules cover every language that can hold a query builder, including
+    # the two that do not have one in this estate yet -- see standards_query.py.
+    if config.check_query_shape and path.suffix in (".cs", ".razor", ".py", ".php", ".ts", ".tsx"):
+        yield from check_query_shape(path, lines, config)
+        yield from check_filter_in_memory(path, lines, config)
 
     if path.suffix in (".cs", ".razor"):
         yield from check_csharp_members(path, lines, config)

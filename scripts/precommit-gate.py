@@ -64,15 +64,39 @@ def build_gates(repo_root: Path) -> list[tuple[str, list[str]]]:
     package_json = repo_root / "package.json"
     if package_json.is_file():
         scripts = json.loads(package_json.read_text(encoding="utf-8")).get("scripts", {})
-        # pnpm ships as a .cmd shim on Windows; the bare name is not executable without a
-        # shell, and subprocess would raise FileNotFoundError and skip the gate silently.
-        pnpm = "pnpm.cmd" if os.name == "nt" else "pnpm"
+        runner = js_runner(repo_root)
         if "type-check" in scripts:
-            gates.append(("type-check", [pnpm, "type-check"]))
+            gates.append(("type-check", [runner, "run", "type-check"]))
         if "lint" in scripts:
-            gates.append(("lint", [pnpm, "lint"]))
+            gates.append(("lint", [runner, "run", "lint"]))
 
     return gates
+
+
+def js_runner(repo_root: Path) -> str:
+    """The package manager this repo actually uses, decided by its lockfile.
+
+    Hardcoding `pnpm` was wrong twice over. On a machine without pnpm it raises
+    FileNotFoundError, which run_gate treats as "toolchain absent" and skips -- so an
+    npm repo's lint and type-check gates vanish silently, which is the failure mode this
+    whole pack exists to prevent. And where pnpm *is* installed it runs anyway, against a
+    node_modules another manager laid out.
+
+    `run` is always passed explicitly: `npm type-check` is not a command, and relying on
+    pnpm's bare-script shorthand is what made the two look interchangeable.
+    """
+    lockfiles = (
+        ("pnpm-lock.yaml", "pnpm"),
+        ("yarn.lock", "yarn"),
+        ("package-lock.json", "npm"),
+    )
+    name = next(
+        (runner for lockfile, runner in lockfiles if (repo_root / lockfile).is_file()),
+        "npm",
+    )
+    # These ship as .cmd shims on Windows; the bare name is not executable without a
+    # shell, so subprocess would raise FileNotFoundError and skip the gate silently.
+    return f"{name}.cmd" if os.name == "nt" else name
 
 
 def run_gate(name: str, command: list[str], repo_root: Path) -> str | None:

@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """Shared vocabulary for the standards checks: what a violation is, and what is in scope.
 
-Third file of the trio, split off when standards_checks.py crossed its own 500-line limit.
-The seam is real -- these change for different reasons:
+One module per reason-to-change. Nothing here is language-specific:
 
-    standards_core.py     what a violation IS, which files are in scope, file length
-    standards_checks.py   what counts as a violation in each language
-    check-source-limits.py  the driver: walking, the baseline ratchet, reporting, CLI
+    standards_core.py        what a violation IS, the shared name/money/date vocabulary,
+                             the file-length rule
+    standards_exemptions.py  how a file declares a smoke-alarm rule does not apply to it
+    standards_scope.py       which files are in scope at all
+    standards_checks.py      what counts as a violation in each language (the dispatcher)
+    standards_sentinels.py   unset-not-zero + payload-default
+    standards_compose.py     the deployment contract (ports, names, deploy gate)
+    standards_query.py       query-shape: an ORM query big enough to want a view
+    check-source-limits.py   the driver: walking, the baseline ratchet, reporting, CLI
 
-Adding a language or a rule touches only the middle one. Nothing here is language-specific.
+Adding a language touches standards_checks.py; adding a rule adds a module beside it.
+`/apply-standards` copies ALL of them -- a partial copy is an ImportError at commit time.
 
 Source of truth: engineering-standards/scripts/standards_core.py
 """
@@ -21,39 +27,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional
 
+from standards_exemptions import exemption_reason, file_length_exemption
+
 DEFAULT_MAX_FILE_LINES = 500
 
-# An in-file declaration that this file is long for a reason refactoring cannot improve.
-# The reason is captured and required, because "exempt" on its own is a shrug and the
-# whole point is that somebody looked. Matched case-insensitively, and the marker may sit
-# behind any comment syntax (`#`, `//`, `*`, or bare inside a docstring), so one pattern
-# serves every language the scanner reads.
+# A BACKSTOP only. query-shape fires primarily on STRUCTURE (see standards_query.py) --
+# a six-line aggregate across three tables wants a view and no size threshold would ever
+# catch it, while a twenty-line flat projection is merely wide. Size survives for the
+# pathologically long query that is view-shaped in no way the regexes can name.
 #
-# Matched per LINE, never against the joined header. A single DOTALL regex with a
-# "run to the next blank line" terminator looked equivalent and was not: where the reason
-# is the last thing in a docstring there IS no following blank line, so the capture ran on
-# through the closing delimiter and into the code. Every reason then measured hundreds of
-# characters, and `exempt -- it is fine` passed the length floor that exists to reject
-# exactly that.
-FILE_LENGTH_EXEMPTION = re.compile(
-    r"standards:\s*file-length\s+exempt\s*[-–—:]{1,2}\s*(?P<reason>.*)",
-    re.IGNORECASE,
-)
-
-# Openers and closers that end the reason: the marker's prose stops at the end of its
-# comment block, never at the first thing that happens to follow it.
-REASON_TERMINATORS = ('"""', "'''", "*/", "-->", "*@")
-
-# Comment syntax stripped from a continuation line before it is appended to the reason.
-REASON_LINE_PREFIXES = ("#", "//", "*", "--")
-
-# Only the header is searched. A marker buried at line 900 would be invisible to anyone
-# opening the file, which defeats the point of putting it in the file at all.
-HEADER_SCAN_LINES = 40
-
-# Shorter than this is not an argument. Tuned so "declarative schema" alone fails and
-# "declarative ORM schema; length tracks table count, not responsibility" passes.
-MIN_EXEMPTION_REASON_LENGTH = 30
+# Calibrated against 209 real query chains across InvoTrack, DonorLink, allegro-it-services,
+# sourcetext.ai and jacks_corner: median 4 lines, p90 9, p99 15, max 25. Nothing in the
+# corpus reaches 30, which is the point -- as a backstop it should be quiet.
+DEFAULT_QUERY_MAX_LINES = 30
 
 # Prefixes required on boolean members by the naming standard.
 BOOLEAN_PREFIXES = ("Is", "Has", "Can", "Should")
@@ -130,30 +116,6 @@ def external_keys_read(line: str) -> list[str]:
         if key
     ]
 
-SOURCE_SUFFIXES = (
-    ".cs", ".razor", ".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".php",
-)
-
-# Which files are in scope is this module's job, so the predicate stays here even though
-# the compose RULES live in standards_compose.py -- that module imports it, and moving it
-# there instead would make should_check depend on the rules it is supposed to gate.
-#
-# Matched by filename rather than by suffix so that putting ".yml" in scope does not
-# silently drag in every CI workflow, Kubernetes manifest and OpenAPI spec in the tree.
-COMPOSE_FILENAME = re.compile(r"^docker-compose[.\w-]*\.ya?ml$", re.IGNORECASE)
-
-# The JavaScript family, where one set of regexes serves every member. TypeScript is in
-# here too: the sentinel traps are runtime behaviour, identical with or without types.
-SCRIPT_SUFFIXES = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
-
-# Paths never checked: machine-generated, vendored, or build output.
-EXCLUDED_PATH_FRAGMENTS = (
-    "/obj/", "/bin/", "/node_modules/", "/vendor/", "/migrations/", "/.git/",
-    "/dist/", "/build/", "/__pycache__/", "/.venv/", "/venv/", "/staticfiles/",
-    "/wwwroot/lib/", "/.next/", "/coverage/",
-)
-EXCLUDED_NAME_FRAGMENTS = (".min.", ".g.", ".designer.", ".generated.")
-
 # Earliest year a date field may hold before it needs an explicit justification.
 MIN_PLAUSIBLE_YEAR = 1900
 
@@ -219,6 +181,8 @@ class CheckConfig:
     check_declared_types: bool = True
     check_payload_defaults: bool = True
     check_compose_conventions: bool = True
+    check_query_shape: bool = True
+    query_max_lines: int = DEFAULT_QUERY_MAX_LINES
 
     @staticmethod
     def load(config_path: Optional[Path]) -> "CheckConfig":
@@ -236,6 +200,8 @@ class CheckConfig:
             check_declared_types=raw.get("checkDeclaredTypes", True),
             check_payload_defaults=raw.get("checkPayloadDefaults", True),
             check_compose_conventions=raw.get("checkComposeConventions", True),
+            check_query_shape=raw.get("checkQueryShape", True),
+            query_max_lines=raw.get("queryMaxLines", DEFAULT_QUERY_MAX_LINES),
         )
 
 
@@ -366,79 +332,6 @@ def iter_code_lines(lines: list[str], suffix: str) -> Iterable[tuple[int, str]]:
             continue
 
         yield line_number, line
-
-
-def should_check(path: Path, repo_root: Path, config: CheckConfig) -> bool:
-    """Decide whether a file is in scope.
-
-    Exclusions are matched against the REPO-RELATIVE path, never the absolute one: a repo
-    that happens to live under a directory called "build" or "dist" would otherwise have
-    every one of its files silently skipped.
-    """
-    if path.suffix not in SOURCE_SUFFIXES and not COMPOSE_FILENAME.match(path.name):
-        return False
-
-    lowered = "/" + path.relative_to(repo_root).as_posix().casefold() + "/"
-
-    excluded = EXCLUDED_PATH_FRAGMENTS + config.extra_excluded_fragments
-    if any(fragment.casefold() in lowered for fragment in excluded):
-        return False
-
-    return not any(fragment in path.name.casefold() for fragment in EXCLUDED_NAME_FRAGMENTS)
-
-
-def file_length_exemption(lines: list[str]) -> Optional[str]:
-    """The stated reason this file is allowed to exceed the limit, or None.
-
-    The size limit is a SMOKE ALARM, not a spec: it exists to find files that have
-    accumulated a second responsibility. Some files are long for a reason that
-    refactoring cannot improve -- a declarative schema whose length tracks the number of
-    entities, a lookup table, a translation map, a parser whose grammar is one thing.
-    Splitting those scatters one subject across two files that must always be edited
-    together, which refactoring.md is explicit is WORSE than the long file.
-
-    This is deliberately NOT a baseline. A baseline is silent debt that someone intends
-    to pay down; this is a decision, and it differs in three ways that matter:
-
-      * it lives IN the file, so it is read by anyone opening it and cannot drift from
-        the code the way a separate ledger does;
-      * it REQUIRES a reason, long enough to be an argument rather than a shrug;
-      * the scanner counts it and prints the total, so an exemption is never invisible.
-
-    Write it anywhere in the file's first HEADER_SCAN_LINES lines -- the module
-    docstring or the top comment block:
-
-        standards: file-length exempt -- declarative ORM schema; length tracks the
-        number of tables, not accumulated responsibility.
-
-    If you cannot write a reason you would defend in review, that is the rule working.
-    Split the file.
-    """
-    header = lines[:HEADER_SCAN_LINES]
-    marker_index = next(
-        (index for index, line in enumerate(header) if FILE_LENGTH_EXEMPTION.search(line)),
-        None,
-    )
-    if marker_index is None:
-        return None
-
-    match = FILE_LENGTH_EXEMPTION.search(header[marker_index])
-    parts = [match.group("reason")] if match else []
-
-    # A reason routinely wraps. Keep taking lines until the comment block ends, so the
-    # length floor measures the whole argument rather than only its first line.
-    for line in header[marker_index + 1:]:
-        stripped = line.strip()
-        if not stripped or any(end in stripped for end in REASON_TERMINATORS):
-            break
-        for prefix in REASON_LINE_PREFIXES:
-            if stripped.startswith(prefix):
-                stripped = stripped[len(prefix):].strip()
-                break
-        parts.append(stripped)
-
-    reason = " ".join(" ".join(parts).split())
-    return reason if len(reason) >= MIN_EXEMPTION_REASON_LENGTH else None
 
 
 def check_file_length(

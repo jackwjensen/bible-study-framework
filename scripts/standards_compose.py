@@ -1,20 +1,34 @@
 #!/usr/bin/env python3
-"""The developer machine's shared state: host ports and container names.
+"""The deployment contract: how a stack is defined, named, and shipped.
 
 Split out of standards_core.py and standards_checks.py, and the seam is a subject
 boundary rather than a line count. Everything else the scanner knows is vocabulary
 for reading SOURCE -- what a money name looks like, when a zero is a lie. This file
-is about the machine every stack shares: only one Allegro IT app runs at a time, so
-the host's port space and container namespace are common property, and a value each
-repo picks for itself drifts.
+is about everything AROUND the source: the machine every stack shares, and the
+pipeline that puts it on the server.
 
-It already did, which is why these rules exist. Two repos both published MySQL on
-3306 and could not run together. Container names were set in the production overlay
-but not the base file, so the same service answered to one name on the server and a
-Compose-generated one on the laptop -- and when parallel sessions competed for
-Docker, containers and ports moved under each other.
+Every rule here exists because something drifted or broke:
 
-Rules here: compose-port, compose-container-name.
+  compose-port            two repos both published MySQL on 3306 and could not run
+                          together; InvoTrack published root MySQL on 0.0.0.0 in
+                          production for months.
+  compose-container-name  names were set in the production overlay but not the base
+                          file, so a service answered to one thing on the server and
+                          a Compose-generated one on the laptop.
+  compose-overlay-name    the production overlay is docker-compose.production.yml in
+                          seven repos and docker-compose.prod.yml in the eighth --
+                          same concept, two spellings, so "which file does production
+                          load?" stopped having one answer.
+  deploy-gate             a deploy job with no `needs:` ships unverified code; before
+                          the check jobs existed, everything compiled on the
+                          production server AFTER merge. That is the failure this
+                          whole pack was built to end.
+  env-example-compose     DonorLink's server .env was missing COMPOSE_FILE, so the
+                          production overlay never loaded, the base file's 3306 stood,
+                          it collided with InvoTrack, and the site was down ~1.5h on
+                          2026-05-27. Documenting the variable is the cheap half of
+                          never repeating that.
+
 The prose half is claude/rules/infrastructure.md.
 
 Source of truth: engineering-standards/scripts/standards_compose.py
@@ -26,7 +40,12 @@ import re
 from pathlib import Path
 from typing import Iterable, Optional
 
-from standards_core import COMPOSE_FILENAME, Violation  # noqa: F401  (re-exported)
+from standards_core import Violation
+from standards_scope import (  # noqa: F401  (re-exported for the dispatcher)
+    COMPOSE_FILENAME,
+    ENV_EXAMPLE_FILENAME,
+    is_workflow,
+)
 
 # THE FEATURE DEFINES THE PORT, not the implementation behind it. Every app answers on
 # 8080 whether it is PHP behind nginx, Blazor, or a Vite dev server; the admin surface is
@@ -124,6 +143,119 @@ def check_compose_ports(path: Path, lines: list[str]) -> Iterable[Violation]:
                     f"8080 frontend / main entry, 8081 backend / admin / second surface, "
                     f"1080 mail inbox, 1025 mail SMTP. A datastore goes on "
                     f"127.0.0.1:3307 instead. See .claude/rules/infrastructure.md."
+                ),
+            )
+
+
+def check_overlay_name(path: Path, lines: list[str]) -> Iterable[Violation]:
+    """Flag a production overlay spelled anything other than docker-compose.production.yml.
+
+    Seven repos say `production`; one says `prod`. Same concept, two spellings, so the
+    question "which file does production load?" stops having a single answer -- and the
+    server's `COMPOSE_FILE` names the file by hand, so a mismatch is silent until a deploy
+    loads the wrong shape. DonorLink lost ~1.5h to a `COMPOSE_FILE` problem already.
+
+    Additional environment files (`.ci`, `.preview`) are NOT flagged: they are extra
+    environments rather than a second spelling of this one.
+    """
+    if path.name.casefold() in ("docker-compose.prod.yml", "docker-compose.prod.yaml"):
+        yield Violation(
+            path=path, line=1, rule="compose-overlay-name",
+            message=(
+                "the production overlay is docker-compose.production.yml everywhere else. "
+                "Rename it, and update COMPOSE_FILE in .env.example and on the server in "
+                "the same change -- COMPOSE_FILE names this file literally."
+            ),
+        )
+
+
+def check_deploy_gate(path: Path, lines: list[str]) -> Iterable[Violation]:
+    """Flag a deploy job that does not gate on anything.
+
+    This is the pack's founding thesis in one rule. Before the check jobs existed, code
+    was first compiled ON THE PRODUCTION SERVER, after merge -- the only standards that
+    never rotted were the ones with a CI job gating deploy. A `deploy` job without
+    `needs:` ships whatever was pushed.
+
+    Deliberately shallow: it asks whether the job declares a dependency at all, not what
+    that dependency runs. A repo can name its gate `check`, `test` or `lint`; what matters
+    is that something has to pass first.
+    """
+    in_jobs = False
+    job_indent: Optional[int] = None
+    job_name = ""
+    job_line = 0
+    has_needs = False
+
+    def pending() -> Iterable[Violation]:
+        if job_name.casefold().startswith("deploy") and not has_needs:
+            yield Violation(
+                path=path, line=job_line, rule="deploy-gate",
+                message=(
+                    f"job '{job_name}' deploys without `needs:`, so nothing has to pass "
+                    f"before it ships. Add a check job that runs the repo's gates and make "
+                    f"this one depend on it. Until CI gated deploy, code was first compiled "
+                    f"on the production server after merge."
+                ),
+            )
+
+    for line_number, line in enumerate(lines, start=1):
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+
+        if re.match(r"^\S", line):
+            yield from pending()
+            job_name = ""
+            in_jobs = line.startswith("jobs:")
+            job_indent = None
+            continue
+
+        if not in_jobs:
+            continue
+
+        key_match = re.match(r"^(?P<indent>\s+)(?P<name>[A-Za-z0-9_.-]+):", line)
+        if key_match is None:
+            continue
+
+        indent = len(key_match.group("indent").expandtabs(2))
+        if job_indent is None:
+            job_indent = indent
+
+        if indent > job_indent:
+            if key_match.group("name") == "needs":
+                has_needs = True
+            continue
+
+        yield from pending()
+        job_name = key_match.group("name")
+        job_line = line_number
+        has_needs = False
+
+    yield from pending()
+
+
+def check_env_example(path: Path, lines: list[str]) -> Iterable[Violation]:
+    """Flag an .env.example that does not document COMPOSE_FILE / COMPOSE_PROJECT_NAME.
+
+    `.env.example` is the only place a deployer learns which variables the server needs.
+    A missing `COMPOSE_FILE` on DonorLink's server meant the production overlay never
+    loaded, the base file's `3306:3306` stood, it collided with InvoTrack's MySQL, and the
+    rollback hit the same fault -- the site was down ~1.5h on 2026-05-27.
+
+    Mentioning it in a comment counts. The point is that the deployer sees the name, not
+    that a value is committed.
+    """
+    text = "\n".join(lines)
+    for variable, why in (
+        ("COMPOSE_FILE", "the server opts into the production overlay with it"),
+        ("COMPOSE_PROJECT_NAME", "it names every container the stack creates"),
+    ):
+        if variable not in text:
+            yield Violation(
+                path=path, line=1, rule="env-example-compose",
+                message=(
+                    f"{variable} is not documented here, but {why}. A deployer setting up "
+                    f"a fresh server has no other list of what the .env must contain."
                 ),
             )
 
