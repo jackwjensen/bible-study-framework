@@ -27,6 +27,20 @@ GIT_COMMIT_PATTERN = re.compile(r"(^|[;&|]\s*)git\s+(-[^\s]+\s+)*commit\b")
 
 GATE_TIMEOUT_SECONDS = 900
 
+# `python -m ruff` when ruff is not installed. Python spells this exactly one way, and it
+# cannot be produced by a lint finding, so matching the phrase is safe.
+MODULE_MISSING_PATTERN = re.compile(r"No module named '?\w+'?")
+
+# One check: its name, the command, and the directory to run it in. The directory matters
+# for a monorepo, where a nested Python project's config only applies from its own root.
+Gate = tuple[str, list[str], Path]
+
+# How deep to look for a nested `pyproject.toml`, and what never to look inside.
+PYTHON_PROJECT_SEARCH_DEPTH = 3
+VENDOR_DIRECTORIES = frozenset(
+    {".git", ".venv", "venv", "node_modules", "site-packages", "__pycache__", "build", "dist"}
+)
+
 # A rule tag as check-source-limits.py prints it: `path:12: [unset-not-zero] message`.
 # Matched by SHAPE rather than by an enumerated list of rule names. The list version of
 # this named four rules and silently under-reported the other six: when a commit tripped
@@ -48,29 +62,114 @@ def find_repo_root(start: Path) -> Path | None:
     return None
 
 
-def build_gates(repo_root: Path) -> list[tuple[str, list[str]]]:
+def build_gates(repo_root: Path) -> list[Gate]:
     """The verification commands that apply to this repo, in cheapest-first order."""
-    gates: list[tuple[str, list[str]]] = []
+    gates: list[Gate] = []
 
     limits_script = repo_root / "scripts" / "check-source-limits.py"
     if limits_script.is_file():
-        gates.append(("source limits", [sys.executable, str(limits_script), "--root", str(repo_root)]))
+        gates.append((
+            "source limits",
+            [sys.executable, str(limits_script), "--root", str(repo_root)],
+            repo_root,
+        ))
 
     if any(repo_root.glob("*.sln")):
-        gates.append(("dotnet build", ["dotnet", "build", "--nologo", "-warnaserror"]))
+        gates.append(("dotnet build", ["dotnet", "build", "--nologo", "-warnaserror"], repo_root))
         if any(repo_root.rglob("*Tests*.csproj")):
-            gates.append(("dotnet test", ["dotnet", "test", "--nologo", "--no-build"]))
+            gates.append(("dotnet test", ["dotnet", "test", "--nologo", "--no-build"], repo_root))
 
     package_json = repo_root / "package.json"
     if package_json.is_file():
         scripts = json.loads(package_json.read_text(encoding="utf-8")).get("scripts", {})
         runner = js_runner(repo_root)
         if "type-check" in scripts:
-            gates.append(("type-check", [runner, "run", "type-check"]))
+            gates.append(("type-check", [runner, "run", "type-check"], repo_root))
         if "lint" in scripts:
-            gates.append(("lint", [runner, "run", "lint"]))
+            gates.append(("lint", [runner, "run", "lint"], repo_root))
+
+    gates += python_gates(repo_root)
 
     return gates
+
+
+def python_gates(repo_root: Path) -> list[Gate]:
+    """ruff and pytest, for every Python project in the repo that has declared them.
+
+    These were missing, and their absence made the gate materially weaker than the CI job
+    on exactly the repos it mattered for: a Python repo got `check-source-limits` and
+    nothing else, while `ci/check-node-python.yml` and every repo's own documented
+    verification command run `ruff check .` and `pytest`. A JS repo had its linter gated
+    and a Python repo did not, which is not a decision anyone made.
+
+    Gated on the project *declaring* the tool rather than on the tool being importable: a
+    declaration is the repo saying it wants this enforced, and it cannot be satisfied by
+    an incomplete local environment. A missing interpreter or module is handled by
+    `run_gate`, which skips rather than blocks -- see the note there on why that direction
+    is the safe one for a pre-commit hook.
+
+    **Per project, not per repo.** allegro-it-services keeps its Django half in
+    `packages/backend/`, so a root-only check would have gated the TypeScript and left the
+    Python ungated -- reintroducing the very asymmetry this function exists to remove, in
+    the one repo where it is least visible.
+    """
+    gates: list[Gate] = []
+    for project in python_projects(repo_root):
+        declared = (project / "pyproject.toml").read_text(encoding="utf-8")
+        interpreter = python_interpreter(project, repo_root)
+        where = "" if project == repo_root else f" ({project.relative_to(repo_root)})"
+
+        if "[tool.ruff" in declared:
+            gates.append((f"ruff{where}", [interpreter, "-m", "ruff", "check", "."], project))
+
+        # Last, and deliberately: it is the only gate that costs real seconds, so
+        # everything cheap has already had its say by the time a commit waits on a suite.
+        if "[tool.pytest" in declared or (project / "tests").is_dir():
+            gates.append(
+                (f"pytest{where}", [interpreter, "-m", "pytest", "-q", "-x"], project)
+            )
+
+    return gates
+
+
+def python_projects(repo_root: Path) -> list[Path]:
+    """Every directory holding a `pyproject.toml`, root or nested.
+
+    Walked with pruning rather than `rglob`, because `rglob` descends into `node_modules`
+    and `.venv` -- tens of thousands of directories, several of which contain a
+    `pyproject.toml` belonging to a dependency. Gating a commit on a third-party package's
+    test suite would be absurd, and slow enough to notice.
+    """
+    found: list[Path] = []
+    for directory, subdirectories, filenames in os.walk(repo_root):
+        here = Path(directory)
+        if len(here.relative_to(repo_root).parts) >= PYTHON_PROJECT_SEARCH_DEPTH:
+            subdirectories.clear()
+        subdirectories[:] = [
+            name for name in subdirectories if name not in VENDOR_DIRECTORIES
+        ]
+        if "pyproject.toml" in filenames:
+            found.append(here)
+    return sorted(found)
+
+
+def python_interpreter(project: Path, repo_root: Path) -> str:
+    """The project's own virtualenv where it has one, else the repo's, else this one.
+
+    A project's ruff and pytest live in its venv, and `sys.executable` here is the
+    interpreter the *hook* was started with -- on Windows usually a system Python that has
+    neither. Running that one would report "No module named ruff" against a perfectly
+    healthy repo, so a venv is preferred wherever one exists. The project is checked before
+    the repo root because a monorepo's backend owns its own environment.
+    """
+    candidates = [
+        base / name / executable
+        for base in dict.fromkeys((project, repo_root))
+        for name in (".venv", "venv")
+        for executable in (Path("Scripts") / "python.exe", Path("bin") / "python")
+    ]
+    found = next((path for path in candidates if path.is_file()), None)
+    return str(found) if found else sys.executable
 
 
 def js_runner(repo_root: Path) -> str:
@@ -99,12 +198,12 @@ def js_runner(repo_root: Path) -> str:
     return f"{name}.cmd" if os.name == "nt" else name
 
 
-def run_gate(name: str, command: list[str], repo_root: Path) -> str | None:
+def run_gate(name: str, command: list[str], working_directory: Path) -> str | None:
     """Run one gate. Returns None on success, or a short failure description."""
     try:
         completed = subprocess.run(
             command,
-            cwd=repo_root,
+            cwd=working_directory,
             capture_output=True,
             text=True,
             timeout=GATE_TIMEOUT_SECONDS,
@@ -120,6 +219,15 @@ def run_gate(name: str, command: list[str], repo_root: Path) -> str | None:
         return None
 
     output = (completed.stdout or "") + (completed.stderr or "")
+
+    # Same reasoning as the FileNotFoundError above, for a tool invoked as `python -m x`:
+    # that spelling turns "not installed" into an ordinary non-zero exit rather than a
+    # missing executable, so without this a machine that has never run `pip install -e .`
+    # would be unable to commit anything. CI still enforces it. Matched narrowly -- the
+    # phrase only appears when the module itself is absent, never in a real finding.
+    if MODULE_MISSING_PATTERN.search(output):
+        return None
+
     interesting = [
         line for line in output.splitlines()
         if ": error " in line or SCANNER_RULE_TAG.search(line)
@@ -180,8 +288,8 @@ def main() -> int:
 
     failures = [
         failure
-        for name, gate_command in build_gates(repo_root)
-        if (failure := run_gate(name, gate_command, repo_root)) is not None
+        for name, gate_command, working_directory in build_gates(repo_root)
+        if (failure := run_gate(name, gate_command, working_directory)) is not None
     ]
 
     if not failures:
