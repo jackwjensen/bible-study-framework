@@ -31,6 +31,19 @@ GATE_TIMEOUT_SECONDS = 900
 # cannot be produced by a lint finding, so matching the phrase is safe.
 MODULE_MISSING_PATTERN = re.compile(r"No module named '?\w+'?")
 
+# The escape hatch, as it can actually be written in a command this hook inspects:
+# `SKIP_STANDARDS_GATE=1 git commit …` (Bash) or `$env:SKIP_STANDARDS_GATE='1'; git commit …`
+# (PowerShell).
+#
+# Anchored to the start of the command or to a statement separator, which is the only place
+# an assignment can really take effect -- and which keeps the phrase from counting when it
+# merely appears *inside* an argument, so `git commit -m "document SKIP_STANDARDS_GATE=1"`
+# is a commit message about the hatch rather than a use of it. Requires the literal 1, so
+# `=0` reads as what it says.
+SKIP_REQUEST_PATTERN = re.compile(
+    r"""(^|[;&|]\s*)(\$env:)?SKIP_STANDARDS_GATE\s*=\s*['"]?1['"]?""",
+)
+
 # One check: its name, the command, and the directory to run it in. The directory matters
 # for a monorepo, where a nested Python project's config only applies from its own root.
 Gate = tuple[str, list[str], Path]
@@ -53,6 +66,26 @@ SCANNER_RULE_TAG = re.compile(r"\[[a-z][a-z0-9-]*\]")
 # standing convention is to prefer the PowerShell tool, so gating only on Bash leaves the
 # commit gate decorative on exactly the machine it most needs to run on.
 SHELL_TOOL_NAMES = ("Bash", "PowerShell")
+
+
+def is_skip_requested(command: str) -> bool:
+    """Whether this commit asks for the documented escape hatch.
+
+    Read from the **command**, not only from this process's environment, because as a
+    `PreToolUse` hook the gate runs in the *agent's* process — it inspects a command that
+    has not executed yet, so a `SKIP_STANDARDS_GATE=1` set inside that command cannot
+    possibly be visible in `os.environ`. Before this, the only way to reach the hatch the
+    gate's own error message advertises was to edit `~/.claude/settings.json` and make the
+    skip **global and permanent**, which is the opposite of a one-off.
+
+    Reading the command is also the more auditable of the two: the request appears verbatim
+    in the transcript and in shell history, where a persistent env var appears nowhere.
+
+    Both shells' spellings, since the pack gates Bash and PowerShell alike.
+    """
+    if os.environ.get("SKIP_STANDARDS_GATE") == "1":
+        return True
+    return bool(SKIP_REQUEST_PATTERN.search(command))
 
 
 def find_repo_root(start: Path) -> Path | None:
@@ -279,7 +312,7 @@ def main() -> int:
     if not GIT_COMMIT_PATTERN.search(command):
         return 0
 
-    if os.environ.get("SKIP_STANDARDS_GATE") == "1":
+    if is_skip_requested(command):
         return 0
 
     repo_root = find_repo_root(Path.cwd())
