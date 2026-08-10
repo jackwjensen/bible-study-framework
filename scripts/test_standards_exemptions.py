@@ -133,6 +133,75 @@ def main() -> int:
     if buried:
         failures.append("exemption_reason: a marker buried past the header was honoured")
 
+    # A LINE-comment marker must stop at the first code line. Before this was enforced the
+    # reason ran on into the file body, and a `-- lookup` shrug cleared the 30-char floor on
+    # the strength of the `namespace` line beneath it -- the floor met by text the author
+    # never wrote as a reason. C# was the exposed language: `#` and `"""` happen to be
+    # followed by a terminator often enough that the hole never showed.
+    absorbed = exemption_reason(
+        [
+            "// standards: file-length exempt -- lookup",
+            "namespace DonorLink.Data.Translations;",
+            "",
+            "public static class DanishTranslations",
+        ],
+        "file-length",
+    )
+    if absorbed:
+        failures.append(
+            "exemption_reason: a short reason cleared the floor by absorbing a code line "
+            f"({absorbed!r})"
+        )
+
+    trailing_code = exemption_reason(
+        [
+            "// standards: file-length exempt -- a translation lookup table; its length",
+            "// tracks the number of UI keys, not accumulated responsibility.",
+            "namespace DonorLink.Data.Translations;",
+        ],
+        "file-length",
+    )
+    if trailing_code is None or "namespace" in trailing_code:
+        failures.append(
+            "exemption_reason: a good line-comment reason must be honoured AND stop at the "
+            f"code line, got {trailing_code!r}"
+        )
+
+    # A TRAILING marker is the same closerless comment as a whole-line one, so it must be
+    # delimited the same way. Classifying by "is the whole line a comment?" would miss it and
+    # leave the floor reachable by borrowed text on this one shape.
+    trailing_marker = exemption_reason(
+        [
+            "namespace DonorLink.Data.Translations;  // standards: file-length exempt -- lookup",
+            "public static class DanishTranslations",
+        ],
+        "file-length",
+    )
+    if trailing_marker:
+        failures.append(
+            "exemption_reason: a trailing short marker cleared the floor by absorbing code "
+            f"({trailing_marker!r})"
+        )
+
+    # The stop must NOT reach a docstring marker: its continuation lines are bare prose with
+    # no comment prefix, so treating an unprefixed line as "code" would truncate every
+    # Python exemption to its first line. The closer is what ends the reason there.
+    docstring = exemption_reason(
+        [
+            '"""The account tables.',
+            "",
+            "standards: file-length exempt -- declarative ORM schema; its length tracks",
+            "the number of tables, not accumulated responsibility.",
+            '"""',
+        ],
+        "file-length",
+    )
+    if docstring is None or "number of tables" not in docstring:
+        failures.append(
+            "exemption_reason: a docstring reason must still wrap onto its unprefixed "
+            f"continuation lines, got {docstring!r}"
+        )
+
     # The two scopes must not leak into each other: a header marker is not a licence for
     # every line in the file, which is exactly the conflation this split exists to prevent.
     leaked = line_exemption_reason(
@@ -145,7 +214,7 @@ def main() -> int:
 
     for failure in failures:
         print(f"FAIL  {failure}")
-    total = len(CASES) + 3
+    total = len(CASES) + 7
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0
 

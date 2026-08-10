@@ -37,6 +37,12 @@ REASON_TERMINATORS = ('"""', "'''", "*/", "-->", "*@")
 # Comment syntax stripped from a continuation line before it is appended to the reason.
 REASON_LINE_PREFIXES = ("#", "//", "*", "--")
 
+# Comment openers with no closer, so the comment ends at the end of its line. A marker
+# introduced by one of these is delimited by the first code line, not by a terminator --
+# see the delimiter choice in `exemption_reason`. `*` is absent deliberately: it opens
+# nothing, it continues a `/* */` block, and that block's terminator does the work.
+LINE_COMMENT_OPENERS = ("//", "#", "--")
+
 # Only the header is searched. A marker buried at line 900 would be invisible to anyone
 # opening the file, which defeats the point of putting it in the file at all.
 HEADER_SCAN_LINES = 40
@@ -54,6 +60,54 @@ def _is_comment(line: str) -> bool:
     """True when the line is entirely a comment, in any of the languages scanned."""
     stripped = line.strip()
     return bool(stripped) and stripped.startswith(REASON_LINE_PREFIXES)
+
+
+def _wrapped_reason(lines: list[str], marker_index: int, match: "re.Match[str]") -> str:
+    """The marker's whole reason, following it onto the continuation lines it wraps to.
+
+    THE ONE walker, called by both scopes. It exists as a function because the two scopes
+    each had their own copy and the copies drifted: the line-scoped one stopped at a code
+    line, the file-scoped one did not, so a `//` header marker ran on into the file body
+    and `-- lookup` (6 chars) cleared the 30-char floor on the strength of the `namespace`
+    line beneath it. That is the pack's own DRY rule failing in the pack's own source --
+    one behaviour, two implementations, fixed in one of them.
+
+    Where the reason ends depends on how the marker was written, because the two comment
+    styles end in different places:
+
+      * A LINE comment (`//`, `#`, `--`) has no closer, so it ends at the first line that
+        is not also a line comment -- a code line STOPS the reason.
+      * A docstring or `/* */` block has a closer, and its continuation lines carry no
+        prefix at all (bare prose under `\"\"\"`). There the terminator does the work, and
+        treating an unprefixed line as code would truncate every Python exemption to its
+        first line.
+
+    The style is read from whether a closerless opener INTRODUCES the marker, rather than
+    from whether its line is wholly a comment, so a trailing marker (`namespace Foo;  //
+    standards: ...`) is delimited like the line comment it is. Misjudging in this direction
+    is the safe one: a reason cut short falls under the floor and the file gets reported,
+    which is loud, where one that runs long is silent.
+    """
+    line_before_marker = lines[marker_index][: match.start()]
+    stops_at_code = _is_comment(lines[marker_index]) or any(
+        opener in line_before_marker for opener in LINE_COMMENT_OPENERS
+    )
+
+    parts = [match.group("reason")]
+    for follower in lines[marker_index + 1:]:
+        stripped = follower.strip()
+        if not stripped or any(end in stripped for end in REASON_TERMINATORS):
+            break
+        for prefix in REASON_LINE_PREFIXES:
+            if stripped.startswith(prefix):
+                stripped = stripped[len(prefix):].strip()
+                break
+        else:
+            if stops_at_code:
+                break  # a code line: the comment block ended
+        parts.append(stripped)
+
+    return " ".join(" ".join(parts).split())
 
 
 def file_length_exemption(lines: list[str]) -> Optional[str]:
@@ -128,22 +182,9 @@ def line_exemption_reason(lines: list[str], index: int, tag: str) -> Optional[st
         match = EXEMPTION_MARKER.search(lines[start])
         if not match or match.group("tag").casefold() != wanted:
             continue
-        index = start
-        parts = [match.group("reason")]
         # The reason routinely wraps onto the following comment lines, exactly as it does
         # in a header block -- measure the whole argument, not its first line.
-        for follower in lines[index + 1:]:
-            stripped = follower.strip()
-            if not stripped or any(end in stripped for end in REASON_TERMINATORS):
-                break
-            for prefix in REASON_LINE_PREFIXES:
-                if stripped.startswith(prefix):
-                    stripped = stripped[len(prefix):].strip()
-                    break
-            else:
-                break  # a code line: the comment block ended
-            parts.append(stripped)
-        reason = " ".join(" ".join(parts).split())
+        reason = _wrapped_reason(lines, start, match)
         if len(reason) >= MIN_EXEMPTION_REASON_LENGTH:
             return reason
     return None
@@ -192,19 +233,11 @@ def exemption_reason(lines: list[str], tag: str) -> Optional[str]:
         return None
 
     match = marker_for_tag(header[marker_index])
-    parts = [match.group("reason")] if match else []
+    if match is None:  # unreachable: marker_index came from marker_for_tag
+        return None
 
-    # A reason routinely wraps. Keep taking lines until the comment block ends, so the
-    # length floor measures the whole argument rather than only its first line.
-    for line in header[marker_index + 1:]:
-        stripped = line.strip()
-        if not stripped or any(end in stripped for end in REASON_TERMINATORS):
-            break
-        for prefix in REASON_LINE_PREFIXES:
-            if stripped.startswith(prefix):
-                stripped = stripped[len(prefix):].strip()
-                break
-        parts.append(stripped)
-
-    reason = " ".join(" ".join(parts).split())
+    # The reason wraps onto the lines below it; `_wrapped_reason` owns where it stops, for
+    # both scopes, so the two can never again disagree about it. Bounded to the header, so
+    # a reason cannot run past the window that makes the marker readable in the first place.
+    reason = _wrapped_reason(header, marker_index, match)
     return reason if len(reason) >= MIN_EXEMPTION_REASON_LENGTH else None
