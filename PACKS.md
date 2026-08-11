@@ -32,6 +32,30 @@ is what makes the rule above workable rather than merely stated.
 Imported findings live in a separate namespace and are **not validated** against your corpus — their
 internal edges point at ids inside their own pack, which you may not have. `--check` ignores them.
 
+### Adoption — when you come to believe one yourself
+
+Building on an imported finding is the normal route, and it stays the right one while the claim is
+still someone else's. Sometimes it stops being someone else's: you work it, check the verses, and
+conclude it is simply true. Then writing your own finding that says so is the honest outcome — which
+is what the rule above already prescribes, only now the wording you would write is already in front
+of you.
+
+A tool that manages a corpus for you may automate that as **adoption**: copy the imported finding
+into `findings/` as your own, and record where the copy came from in an `adopted_from:` key, whose
+value is `<author-id>/<original-id>`. Two conventions keep the copy honest:
+
+- **`origin` is copied verbatim, never rewritten.** It names whose reading this is, and adopting a
+  finding does not make its reasoning yours. A copy arriving with `origin` reset to your own name
+  would be false on the first hop and unrecoverable on the second.
+- **`status` may be chosen, but never above the original's.** Copying cannot mint maturity: a
+  `hypothesis` you adopt is still a hypothesis, however convinced you are. Working it up afterwards
+  is ordinary study, and then the status is yours to raise.
+
+`adopted_from` is an ordinary frontmatter key. Nothing in this repo requires it, reads it, or acts
+on it, and a corpus that has never seen one is unaffected — the parser carries unknown keys through
+untouched. It is written down here so that when a finding in someone's pack carries one, you know
+what it is telling you.
+
 ## The format
 
 A pack is a zip containing exactly two things:

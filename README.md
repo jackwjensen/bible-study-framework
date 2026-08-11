@@ -178,6 +178,12 @@ Independent of each other, and keeping them apart is most of the value:
 | `contested` | evidence pulls both ways |
 | `retired` | superseded — keep the file, don't delete it |
 
+The first four are a **ladder** — a claim climbs them as the evidence comes in. The last two are
+not rungs but states a claim can be *in*, reachable from anywhere and leading nowhere in
+particular. `STATUS_LADDER` in `study_corpus.py` is that distinction written down, for tools that
+need to compare two findings' maturity; `STATUS_ORDER` beside it is for display and covers all
+six.
+
 **`claim_type` — what kind of claim it is**
 
 | | |

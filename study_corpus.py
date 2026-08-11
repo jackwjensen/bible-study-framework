@@ -39,6 +39,12 @@ VALID_STATUSES = ["hypothesis", "developing", "established", "firm", "contested"
 #: Display order for statuses: most-settled first, retired last.
 STATUS_ORDER = ["firm", "established", "developing", "contested", "hypothesis", "retired"]
 
+#: Maturity, ascending. A subset of VALID_STATUSES on purpose: `contested` and
+#: `retired` are states a claim can be IN, not rungs on the way up, so they have
+#: no rank. Tools that compare maturity (SourceText's adoption cap) read this;
+#: display order stays STATUS_ORDER.
+STATUS_LADDER = ["hypothesis", "developing", "established", "firm"]
+
 #: Epistemic type of a finding's headline claim (the modes' firm/synthesis/open
 #: marking, using non-colliding words so it never clashes with status:firm).
 VALID_CLAIM_TYPES = ["asserted", "synthesized", "open"]
