@@ -23,7 +23,8 @@ import sys
 
 from study_corpus import (
     INDEX_FILE, REQUIRED_FINDING_FIELDS, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
-    VALID_THREAD_STATUSES, load_findings, load_imported, load_themes, load_threads
+    VALID_THREAD_STATUSES, linkable_id, load_findings, load_imported, load_themes,
+    load_threads
 )
 from study_sections import build_index
 
@@ -58,6 +59,17 @@ def validate(findings: dict, themes: dict, threads: dict,
         if declared_id != "" and declared_id != finding_id:
             errors.append(
                 f"{where}: frontmatter id '{declared_id}' does not match filename id '{finding_id}'")
+
+        # An error rather than a notice, because the failure it describes is
+        # invisible: a [[link]] to an id outside the alphabet does not match the
+        # wikilink pattern, so it is never seen as a link and never reported as
+        # broken. It silently does nothing. Nothing else in this corpus fails
+        # that quietly, which is why it is worth stopping the build over.
+        if not linkable_id(finding_id):
+            errors.append(
+                f"{where}: id '{finding_id}' cannot be reached by a [[wikilink]] — "
+                f"ids are lowercase letters, digits and dashes. Rename the file "
+                f"(packs.py's slugify romanises a title into a legal id).")
 
         if finding["status"] != "" and finding["status"] not in VALID_STATUSES:
             errors.append(f"{where}: invalid status '{finding['status']}' "

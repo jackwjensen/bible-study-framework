@@ -278,9 +278,30 @@ def normalize_list(value) -> list[str]:
 
 # ── text helpers ─────────────────────────────────────────────────────────────
 
+#: The alphabet a [[wikilink]] can name. One definition, because it is the same
+#: fact seen from two sides: what a link may say, and what an id must be for a
+#: link to reach it. Kept apart, the two drifted — slugify would mint
+#: `guds-nåde`, slug_ok would approve it, and no link could ever match it.
+LINK_ALPHABET = r"[a-z0-9-]+"
+
+_WIKILINK = re.compile(rf"\[\[({LINK_ALPHABET})\]\]")
+_LINKABLE_ID = re.compile(rf"^{LINK_ALPHABET}$")
+
+
 def wikilinks(body: str) -> list[str]:
     """All [[wikilink]] targets referenced in a body, first-seen order."""
-    return list(dict.fromkeys(re.findall(r"\[\[([a-z0-9-]+)\]\]", body)))
+    return list(dict.fromkeys(_WIKILINK.findall(body)))
+
+
+def linkable_id(value: str) -> bool:
+    """Whether a [[wikilink]] could ever name this id.
+
+    An id outside the alphabet is not merely unusual, it is unreachable — and
+    silently so. `[[שלום]]` does not match the pattern, so it is never read as a
+    link at all, and nothing reports it as broken: the link just does nothing,
+    forever. A reported error is the only way that surfaces.
+    """
+    return bool(_LINKABLE_ID.match(value))
 
 
 def first_paragraph(body: str) -> str:

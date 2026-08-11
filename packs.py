@@ -30,6 +30,7 @@ import zipfile
 from pathlib import Path
 
 from study_corpus import load_content, normalize_list
+from study_text import romanize
 
 ROOT = Path(__file__).resolve().parent
 FINDINGS_DIR = ROOT / "findings"
@@ -83,15 +84,35 @@ def read_manifest(path: Path) -> dict:
 
 
 def slug_ok(value: str) -> bool:
-    return value != "" and all(c.isalnum() or c in "-_" for c in value)
+    """Whether this may be an author id — a folder name on every subscriber's disk.
+
+    ASCII, deliberately. `isalnum()` alone is Unicode-aware and used to accept
+    `guds-nåde`, which then became a directory name, a URL segment and half a
+    download filename on machines whose filesystems normalise, whose terminals
+    cannot render it, and whose HTTP stack must percent-encode it. Underscore is
+    allowed here and not in an id, because an author id is a folder, never a
+    [[wikilink]] target.
+    """
+    return value != "" and value.isascii() and all(c.isalnum() or c in "-_" for c in value)
 
 
 def slugify(text: str) -> str:
-    """Lowercase kebab-case slug; anything not alphanumeric becomes a separator."""
-    out = []
-    for ch in text.lower():
-        out.append(ch if ch.isalnum() else "-")
+    """A kebab-case id in the alphabet [[wikilinks]] can name.
+
+    Romanised first, so a title in Hebrew, Greek or Danish yields something that
+    says what it is about. Before that, `isalnum()` was Unicode-aware and simply
+    *kept* the original letters — `שלום` slugged to `שלום`, which slug_ok
+    approved and no `[[…]]` could ever match. See study_text.romanize for why
+    this transliterates rather than translates.
+    """
+    lowered = romanize(text).lower()
+    out = [character if _is_slug_character(character) else "-" for character in lowered]
     return "-".join(part for part in "".join(out).split("-") if part)
+
+
+def _is_slug_character(character: str) -> bool:
+    """ASCII alphanumeric. Spelled out because `isalnum()` is not that."""
+    return character.isascii() and character.isalnum()
 
 
 def default_pack_id(author_id: str, themes: str | None, title: str, is_everything: bool) -> str:
