@@ -136,7 +136,10 @@ def _sweep() -> list[str]:
     samples += [hebrew for hebrew, _ in HEBREW_CASES]
     samples += [greek for greek, _ in GREEK_CASES]
     samples += [text for text, _ in LATIN_CASES]
-    samples += ["", " ", "-", "a", "1", "\n", "\t", "​", "﻿"]
+    # The zero-width space and the BOM are written as chr() rather than typed:
+    # this file is copied by hand between three repositories, and nobody can
+    # review — or notice the loss of — a character they cannot see.
+    samples += ["", " ", "-", "a", "1", "\n", "\t", chr(0x200B), chr(0xFEFF)]
     return samples
 
 
