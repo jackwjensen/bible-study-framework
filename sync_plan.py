@@ -152,7 +152,11 @@ def _normal_meta(meta: dict, slug: str) -> dict:
         if key in _NON_CONTENT_KEYS:
             continue
         if key in _LIST_KEYS or isinstance(value, list):
-            out[key] = normalize_list(value) if not _has_maps(value) else value
+            # Order-blind: a server may store a list sorted (SourceText sorts
+            # `themes` and the edge lists), and a reordered list is not a new claim.
+            # Compared in order, every such item conflicted on its first sync
+            # from a second computer.
+            out[key] = sorted(normalize_list(value)) if not _has_maps(value) else value
         else:
             out[key] = str(value).strip()
     if out.get("id") == slug:

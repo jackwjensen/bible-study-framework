@@ -387,6 +387,9 @@ def test_same_claim_ignores_serialisation_but_not_content() -> None:
     assert not same_claim(mine, theirs.replace(b"hypothesis", b"developing"), "a")
     assert not same_claim(mine, theirs.replace(b"The claim.", b"The claim!"), "a")
     assert same_claim(b"---\nthemes: [x, y]\n---\nB", b"---\nthemes:\n  - x\n  - y\n---\nB", "a")
+    # As SourceText stores it: lists sorted and quoted (seen in the end-to-end run).
+    assert same_claim(b"---\nrelated: [b, a]\n---\nB", b'---\nrelated: ["a", "b"]\n---\nB', "a")
+    assert not same_claim(b"---\nrelated: [b, a]\n---\nB", b'---\nrelated: ["a"]\n---\nB', "a")
 
 
 def run_all(namespace: dict) -> int:
