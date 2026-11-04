@@ -97,6 +97,14 @@ Findings received from other people live in `imported/<author>/` and are **read-
 [`PACKS.md`](PACKS.md). Never edit them, never move them into `findings/`, and never re-stamp their
 origin. To use one, help the user write *their own* finding that `builds_on` or `tension_with` it.
 
+## Sync conflicts
+
+If the corpus syncs with a server ([`SYNC.md`](SYNC.md)), `python sync.py run` may leave a
+`<id>.md.remote` file beside a finding: the same claim was edited in two places. **Resolving it is the
+user's call, like any other edit to a finding.** Show both versions, propose a resolution, wait for
+confirmation; then write the `.md`, delete the `.remote` file and sync again. Never pick the newer one
+by rule, and never delete a `.remote` file without the user's say — that is what accepts the `.md`.
+
 ## Engineering standards (for anyone editing the tooling, not the corpus)
 
 The Python under `build_index.py` / `packs.py` / `study_corpus.py` / `study_sections.py` is

@@ -81,6 +81,8 @@ the assistant re-invents your conclusions with fresh drift each time. With one, 
 | [`study_corpus.py`](study_corpus.py) | Vocabularies, the frontmatter parser, and the loaders. Import from here |
 | [`study_sections.py`](study_sections.py) | Renders loaded records into `INDEX.md`'s Markdown sections |
 | [`packs.py`](packs.py) | Export findings for someone else; import and subscribe to theirs |
+| [`SYNC.md`](SYNC.md) | *Optional.* Keeping the corpus in step with a server, both ways |
+| [`sync.py`](sync.py) | *Optional.* The sync command (`sync_http`, `sync_plan`, `sync_state` beside it) |
 | `findings/` | One atomic claim per file. Yours. Starts empty |
 | `threads/` | Open questions that aren't settled claims yet |
 | `themes/` | Optional hub pages grouping findings by topic |
@@ -271,8 +273,10 @@ visible over time and is your judgment, never the assistant's. A confident-sound
 `established` would corrupt the maturity axis invisibly — you would end up with a corpus of established
 claims nobody ever established. Promote it yourself, later, once it has survived something.
 
-The transfer is a file on your disk. No account, no API between the two, no git credentials handed to
-anything. If you never use SourceText, the framework is unchanged.
+The transfer is a file on your disk. No git credentials are handed to anything. If you also keep your
+findings in your SourceText account, `sync.py` can keep the two in step both ways — optional, signed in
+through your browser, and never last-write-wins; see [`SYNC.md`](SYNC.md). If you never use SourceText,
+the framework is unchanged.
 
 ## Sharing with other people
 

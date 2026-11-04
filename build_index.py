@@ -22,7 +22,7 @@ from __future__ import annotations
 import sys
 
 from study_corpus import (
-    INDEX_FILE, REQUIRED_FINDING_FIELDS, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
+    FINDINGS_DIR, INDEX_FILE, REQUIRED_FINDING_FIELDS, THEMES_DIR, THREADS_DIR, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
     VALID_THREAD_STATUSES, linkable_id, load_findings, load_imported, load_themes,
     load_threads
 )
@@ -141,6 +141,23 @@ def validate(findings: dict, themes: dict, threads: dict,
     return list(dict.fromkeys(errors)), list(dict.fromkeys(notices))
 
 
+def unresolved_sync_conflicts() -> list[str]:
+    """
+    Conflict files `sync.py` left beside an item (`<id>.md.remote`) — see SYNC.md.
+
+    An error, not a notice: each one is an edit made in two places that nobody
+    has reconciled yet, and a corpus that validates clean while holding one
+    would let it be forgotten. A corpus that never syncs never has one, so this
+    costs it nothing.
+    """
+    found = []
+    for directory in (FINDINGS_DIR, THEMES_DIR, THREADS_DIR):
+        if directory.is_dir():
+            found += [f"{directory.name}/{path.name}" for path in sorted(directory.glob("*.md.remote"))]
+    return [f"{name}: unresolved sync conflict — make the .md say what it should, delete "
+            f"this file, and run: python sync.py run" for name in found]
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 
 def main(argv: list[str]) -> int:
@@ -151,6 +168,7 @@ def main(argv: list[str]) -> int:
     threads = load_threads()
     imported = load_imported()
     errors, notices = validate(findings, themes, threads, imported)
+    errors += unresolved_sync_conflicts()
 
     # Windows consoles default to a legacy codepage; the corpus is full of
     # em-dashes, Greek and Hebrew. Force UTF-8 so reporting never crashes.
