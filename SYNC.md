@@ -77,8 +77,8 @@ is the reader's judgment, like any other change to a finding. Show both, propose
 
 ## What moves, and what does not
 
-- **Moves:** `findings/`, `themes/`, `threads/` — files whose id is lowercase letters, digits and
-  dashes (anything else is skipped and named).
+- **Moves:** `findings/`, `themes/`, `threads/` — files whose id is lowercase letters and digits,
+  with single dashes between words (anything else is skipped and named).
 - **Never moves:** `imported/` (other people's work is not yours to publish), `INDEX.md` (generated),
   anything else.
 - **Pushed byte for byte.** Your file is sent exactly as it is on disk and is *not* rewritten after a
@@ -109,7 +109,8 @@ Written for anyone implementing a server. `{root}` is the server's root address,
 
 ### The API — `{root}/api/sync/v1/{corpus}/…`, `Authorization: Bearer <token>`
 
-`{kind}` is `finding` | `theme` | `thread`; `{slug}` is the file's id, `[a-z0-9-]{1,160}`.
+`{kind}` is `finding` | `theme` | `thread`; `{slug}` is the file's id, `[a-z0-9]+(-[a-z0-9]+)*`, at
+most 160 characters.
 
 | Call | Answer |
 |---|---|
@@ -123,5 +124,8 @@ Written for anyone implementing a server. `{root}` is the server's root address,
 A stale precondition is **`409 {"error": "edit_conflict", "current": {version, sha256, markdown}}`**
 (`current: null` when the item no longer exists) — never an overwrite. A delete refused because other
 findings build on the item is `409 {"error": "has_dependents", "dependents": [...]}`. `401` means
-refresh, then sign in again; `429` carries `Retry-After`. Every error body has a `message` sentence,
+refresh, then sign in again; `429` carries `Retry-After`. `403 consent_required` (the account has not
+agreed to the server storing study content) and `404 unknown_corpus` concern the account, not an
+item: the client stops the run at the first one instead of repeating it for every file. A file the
+server finds invalid (`422`) or too large (`413`) is reported and the rest of the run continues. Every error body has a `message` sentence,
 which the client shows as it is.

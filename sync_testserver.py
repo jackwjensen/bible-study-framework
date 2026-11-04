@@ -33,6 +33,7 @@ class FakeServer:
         self.codes: dict[str, dict] = {}
         self.dependents: dict[str, list[str]] = {}
         self.before_put = None
+        self.consent = True
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(self))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
@@ -149,6 +150,10 @@ def _handler_for(server: FakeServer):
                 return
             key = urllib.parse.urlsplit(self.path).path[len(PREFIX):]
             body = self._body()
+            if not server.consent:
+                self._send(403, {"error": "consent_required",
+                                 "message": "Agree to study storage in SourceText first."})
+                return
             if server.before_put:
                 hook, server.before_put = server.before_put, None
                 hook(key)

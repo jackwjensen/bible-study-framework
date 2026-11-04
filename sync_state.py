@@ -32,8 +32,10 @@ from urllib.parse import urlsplit
 #: Item kinds the protocol knows, and the corpus folder each lives in.
 KIND_DIRS = {"finding": "findings", "theme": "themes", "thread": "threads"}
 
-#: What a slug may be on the wire — the [[wikilink]] alphabet, length-capped.
-_SLUG = re.compile(r"^[a-z0-9-]{1,160}$")
+#: What a slug may be on the wire: the [[wikilink]] alphabet, length-capped, and
+#: no leading, trailing or doubled dash (the protocol's own rule; a file the
+#: server would refuse with 422 is skipped and named here instead).
+_SLUG = re.compile(r"^(?=.{1,160}$)[a-z0-9]+(-[a-z0-9]+)*$")
 
 #: Suffix of a conflict file written beside the item it disputes.
 CONFLICT_SUFFIX = ".remote"

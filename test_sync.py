@@ -416,6 +416,29 @@ def test_a_revoked_sign_in_asks_for_login(env: Env) -> None:
         raise AssertionError("a revoked sign-in must stop the run")
 
 
+@with_env
+def test_missing_consent_stops_the_run_once_and_moves_no_cursor(env: Env) -> None:
+    env.server.consent = False
+    for slug in ("a", "b", "c"):
+        env.write(slug, finding(slug))
+    try:
+        env.run()
+    except SyncError as error:
+        assert "study storage" in str(error)
+    else:
+        raise AssertionError("a consent refusal must stop the run")
+    assert env.server.text("finding/a") is None
+    env.server.consent = True
+    code, outcome, _ = env.run()
+    assert code == 0 and outcome.counts == {"created": 3}
+
+
+def test_slugs_follow_the_protocol_rule() -> None:
+    assert sync_state.slug_ok("a-b-2")
+    for bad in ("-a", "a-", "a--b", "A", "a_b", "a" * 161, ""):
+        assert not sync_state.slug_ok(bad), bad
+
+
 def test_plain_http_only_to_this_computer() -> None:
     assert check_server_url("http://localhost:8081/") == "http://localhost:8081"
     assert check_server_url("https://sourcetext.ai") == "https://sourcetext.ai"

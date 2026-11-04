@@ -46,6 +46,9 @@ ROOT = Path(__file__).resolve().parent
 #: (a theme hub it created for a new finding). Never more: a pass that keeps
 #: finding work is a bug, and looping on it would hide one.
 MAX_PASSES = 2
+#: Refusals about the account or the corpus, not the item: the server has not
+#: been given consent to store study content, or does not serve this corpus.
+ACCOUNT_WIDE_ERRORS = {"consent_required", "unknown_corpus"}
 
 
 @dataclass
@@ -103,6 +106,11 @@ class Syncer:
             try:
                 self._execute(step, local.get(step.key))
             except ApiError as error:
+                if error.code in ACCOUNT_WIDE_ERRORS:
+                    # True of every item alike: say it once and stop, rather than
+                    # repeating it for each of several hundred files.
+                    self.state.save()
+                    raise SyncError(str(error)) from error
                 self.outcome.errors.append(f"{step.key}: {error}")
             self.state.save()
         # The cursor moves only when every change it covers was handled. A
