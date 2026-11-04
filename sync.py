@@ -110,7 +110,10 @@ class Syncer:
                     # True of every item alike: say it once and stop, rather than
                     # repeating it for each of several hundred files.
                     self.state.save()
-                    raise SyncError(str(error)) from error
+                    message, where = str(error), str(error.body.get("consent_url") or "")
+                    if where and where not in message:
+                        message += f" Go to: {where}"
+                    raise SyncError(message) from error
                 self.outcome.errors.append(f"{step.key}: {error}")
             self.state.save()
         # The cursor moves only when every change it covers was handled. A

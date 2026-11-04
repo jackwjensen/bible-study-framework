@@ -152,7 +152,8 @@ def _handler_for(server: FakeServer):
             body = self._body()
             if not server.consent:
                 self._send(403, {"error": "consent_required",
-                                 "message": "Agree to study storage in SourceText first."})
+                                 "message": "Agree to study storage in SourceText first.",
+                                 "consent_url": "https://bible.example/?view=findings"})
                 return
             if server.before_put:
                 hook, server.before_put = server.before_put, None

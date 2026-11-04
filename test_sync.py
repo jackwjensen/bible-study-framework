@@ -425,6 +425,7 @@ def test_missing_consent_stops_the_run_once_and_moves_no_cursor(env: Env) -> Non
         env.run()
     except SyncError as error:
         assert "study storage" in str(error)
+        assert "https://bible.example/?view=findings" in str(error)   # where to give it
     else:
         raise AssertionError("a consent refusal must stop the run")
     assert env.server.text("finding/a") is None
