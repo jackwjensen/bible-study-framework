@@ -125,8 +125,8 @@ A stale precondition is **`409 {"error": "edit_conflict", "current": {version, s
 (`current: null` when the item no longer exists) — never an overwrite. A delete refused because other
 findings build on the item is `409 {"error": "has_dependents", "dependents": [...]}`. `401` means
 refresh, then sign in again; `429` carries `Retry-After`. `403 consent_required` (the account has not
-agreed to the server storing study content) and `404 unknown_corpus` concern the account, not an
-item: the client stops the run at the first one instead of repeating it for every file, and shows
+agreed to the server storing study content), `404 unknown_corpus` and `503 sync_unavailable` (sync is
+not configured on that server) concern the account or the server, not an item: the client stops the run at the first one instead of repeating it for every file, and shows
 the `consent_url` a `403` may carry (where the reader gives that consent). A file the
 server finds invalid (`422`) or too large (`413`) is reported and the rest of the run continues. Every error body has a `message` sentence,
 which the client shows as it is.

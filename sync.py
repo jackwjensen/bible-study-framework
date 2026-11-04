@@ -46,9 +46,10 @@ ROOT = Path(__file__).resolve().parent
 #: (a theme hub it created for a new finding). Never more: a pass that keeps
 #: finding work is a bug, and looping on it would hide one.
 MAX_PASSES = 2
-#: Refusals about the account or the corpus, not the item: the server has not
-#: been given consent to store study content, or does not serve this corpus.
-ACCOUNT_WIDE_ERRORS = {"consent_required", "unknown_corpus"}
+#: Refusals about the account, the corpus or the deployment, not the item: no
+#: consent to store study content, a corpus the server does not serve, or sync
+#: not configured on that server at all.
+ACCOUNT_WIDE_ERRORS = {"consent_required", "unknown_corpus", "sync_unavailable"}
 
 
 @dataclass

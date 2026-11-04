@@ -34,6 +34,7 @@ class FakeServer:
         self.dependents: dict[str, list[str]] = {}
         self.before_put = None
         self.consent = True
+        self.available = True
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(self))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
@@ -127,6 +128,9 @@ def _handler_for(server: FakeServer):
                         "ETag": f'"{item["version"]}"', "X-Content-SHA256": _sha(item["markdown"])})
 
         def _changes(self, since: str) -> None:
+            if not server.available:
+                self._send(503, {"error": "sync_unavailable", "message": "Sync is not set up here."})
+                return
             if since and server.forget_cursors:
                 self._send(410, {"error": "cursor_unknown", "message": "start over"})
                 return

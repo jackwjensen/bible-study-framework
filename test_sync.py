@@ -434,6 +434,19 @@ def test_missing_consent_stops_the_run_once_and_moves_no_cursor(env: Env) -> Non
     assert code == 0 and outcome.counts == {"created": 3}
 
 
+@with_env
+def test_a_server_without_sync_stops_the_run_and_writes_nothing(env: Env) -> None:
+    env.server.available = False
+    env.write("a", finding("a"))
+    try:
+        env.run()
+    except SyncError as error:
+        assert "not set up" in str(error)
+    else:
+        raise AssertionError("sync_unavailable must stop the run")
+    assert not (env.root / ".sync" / "st.state.jsonl").exists()
+
+
 def test_slugs_follow_the_protocol_rule() -> None:
     assert sync_state.slug_ok("a-b-2")
     for bad in ("-a", "a-", "a--b", "A", "a_b", "a" * 161, ""):
