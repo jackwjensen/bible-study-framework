@@ -110,7 +110,23 @@ def discover(server: str) -> dict:
     meta = _json(data)
     if status != 200 or "authorization_endpoint" not in meta or "token_endpoint" not in meta:
         raise SyncError(f"{server} does not publish OAuth metadata; is it a sync server?")
+    # Every endpoint must belong to the server the reader named. Metadata naming
+    # another origin would send the sign-in, and then the tokens, somewhere the
+    # reader never chose — and a development server left with its production
+    # address configured does exactly that, registering clients on the live site.
+    for key in ("issuer", "authorization_endpoint", "token_endpoint",
+                "registration_endpoint", "revocation_endpoint"):
+        value = meta.get(key)
+        if value and check_origin(str(value)) != server:
+            raise SyncError(f"{server} names {value} as its {key.replace('_', ' ')}; refusing to "
+                            f"sign in anywhere but {server}. Is the server configured with its "
+                            "own address?")
     return meta
+
+
+def check_origin(url: str) -> str:
+    parts = urllib.parse.urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}"
 
 
 def _register(meta: dict, client_name: str) -> str:

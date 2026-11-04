@@ -135,7 +135,8 @@ python scripts/check-source-limits.py --root .
 also live in Jack's private corpus repo, and the only intended difference is the `origin` author
 slot — `own` here, the author's name there. A fix to one must be ported to the other, or the two
 definitions of "valid" drift apart. The optional sync modules (`sync.py`, `sync_http.py`,
-`sync_plan.py`, `sync_state.py`, with `test_sync.py` and `sync_testserver.py`) are copied
+`sync_plan.py`, `sync_state.py`, with `test_sync.py`, `test_sync_login.py` and
+`sync_testserver.py`) are copied
 **unchanged** wherever a corpus syncs; `sync_plan.py` finds the frontmatter parser in either layout.
 
 ## Housekeeping the user cannot do themselves

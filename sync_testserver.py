@@ -35,6 +35,7 @@ class FakeServer:
         self.before_put = None
         self.consent = True
         self.available = True
+        self.foreign_metadata = False   # a dev server still configured with prod's address
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(self))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
@@ -108,10 +109,11 @@ def _handler_for(server: FakeServer):
         def do_GET(self) -> None:
             parts = urllib.parse.urlsplit(self.path)
             if parts.path == "/.well-known/oauth-authorization-server":
-                self._send(200, {"authorization_endpoint": server.url + "/authorize",
-                                 "token_endpoint": server.url + "/token",
-                                 "registration_endpoint": server.url + "/register",
-                                 "revocation_endpoint": server.url + "/revoke"})
+                origin = "https://elsewhere.example" if server.foreign_metadata else server.url
+                self._send(200, {"issuer": origin, "authorization_endpoint": origin + "/authorize",
+                                 "token_endpoint": origin + "/token",
+                                 "registration_endpoint": origin + "/register",
+                                 "revocation_endpoint": origin + "/revoke"})
             elif not self._authorised():
                 return
             elif parts.path == PREFIX + "changes":
