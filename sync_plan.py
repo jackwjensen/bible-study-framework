@@ -23,8 +23,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from study_corpus import FINDING_LIST_FIELDS, THREAD_LIST_FIELDS, normalize_list, parse_frontmatter
+from study_corpus import FINDING_LIST_FIELDS, THREAD_LIST_FIELDS
 from sync_state import content_sha
+
+# The sync modules are copied unchanged into corpora whose tooling has moved the
+# parser out of study_corpus into its own module (jacks_corner's study/ has). Ask
+# for it where it lives in either layout rather than keeping two copies of this file.
+try:
+    from study_frontmatter import normalize_list, parse_frontmatter
+except ImportError:
+    from study_corpus import normalize_list, parse_frontmatter
 
 # Actions, in the words the plan is printed in.
 NOTHING = "nothing"
