@@ -37,16 +37,23 @@ script on `127.0.0.1`. Your password never passes through the script. The sign-i
 user profile**, never in the corpus (`%APPDATA%\bible-study-framework\sync\` on Windows, encrypted
 for your Windows user; `~/.config/bible-study-framework/sync/` elsewhere, readable by you only). So a
 corpus can be pushed, zipped or shared without carrying it, and each computer signs in once.
-`python sync.py logout` revokes this computer's sign-in.
+`python sync.py logout` revokes this computer's sign-in. `python sync.py login --no-browser` prints
+the sign-in address instead of opening a browser, and waits — for approving it in a browser elsewhere.
 
 ### What to commit
 
-- `.sync/remotes.json` and `.sync/<remote>.state.json` — **commit both.** The state file is the base.
-  Committed, a second computer that clones or pulls the corpus has the same base as the first, so its
-  first sync moves only what really changed.
+- `.sync/remotes.json` and `.sync/<remote>.state.jsonl` — **commit both.** The state file is the
+  base. Committed, a second computer that clones or pulls the corpus has the same base as the first,
+  so its first sync moves only what really changed.
+- `.gitattributes` with `.sync/*.state.jsonl merge=union`. Two computers that both synced will both
+  have changed the base; `union` lets `git pull` keep both versions' lines instead of stopping. The
+  base is one sorted line per item for this reason, and `sync.py` reads a merged one safely: an item
+  the two recorded differently is compared with the server afresh, and a merged cursor is not trusted
+  (that run compares everything). A base that cannot be read at all is kept as `.broken` and the run
+  compares everything — safe, except that an item deleted on one side since the last sync comes back.
 - `<file>.md.remote` conflict files — commit them if you commit mid-conflict, so every clone knows the
   conflict is open. `build_index.py --check` fails while one exists, which is deliberate.
-- `.sync/*.report.md` — not committed (ignored); it is the last run's report.
+- `.sync/*.report.md` and `.sync/*.broken` — not committed (ignored).
 
 **With two computers, `git pull` before you sync.** Syncing on a clone that is behind is safe — it can
 never lose an edit — but the files it pulls will then meet the same edits arriving through git.

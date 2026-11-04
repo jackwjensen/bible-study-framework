@@ -4,7 +4,7 @@ sync_state.py — what `sync.py` remembers between runs, and where.
 
 Two kinds of memory, kept apart on purpose:
 
-- **The sync base**, in the corpus at `.sync/<remote>.state.json`. For every item
+- **The sync base**, in the corpus at `.sync/<remote>.state.jsonl`. For every item
   it records what both sides looked like the last time they agreed: the server's
   version and content hash, and the hash of the file on this disk. That is the
   third leg of a three-way comparison, and it is *committed*, so a corpus cloned
@@ -150,6 +150,9 @@ def save_remotes(root: Path, remotes: dict) -> None:
     atomic_write(sync_dir(root) / "remotes.json", (text + "\n").encode("utf-8"))
 
 
+_MERGE_MARKERS = ("<<<<<<<", "=======", ">>>>>>>", "|||||||")
+
+
 class SyncState:
     """The base for one remote: a cursor, and one record per item.
 
@@ -158,21 +161,71 @@ class SyncState:
     did not exist here. A record may carry `"pending": {"version", "sha"}`: the
     server's side of an unresolved conflict, which becomes the base the moment
     the person resolving it deletes the conflict file.
+
+    The file is committed and written by every computer that syncs, so it is
+    built to survive `git pull`: one JSON object per line, items sorted, and
+    `merge=union` in .gitattributes so git keeps both sides' lines rather than
+    stopping. Reading it back, an item two computers recorded differently is
+    dropped (it is compared against the server afresh, which is always safe),
+    and a cursor is only trusted from a file nobody merged.
     """
 
     def __init__(self, root: Path, remote: str):
-        self.path = sync_dir(root) / f"{remote}.state.json"
+        self.path = sync_dir(root) / f"{remote}.state.jsonl"
         self.cursor: str | None = None
         self.items: dict[str, dict] = {}
+        self.notes: list[str] = []
         if self.path.exists():
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-            self.cursor = data.get("cursor")
-            self.items = data.get("items", {})
+            self._read()
+
+    def _read(self) -> None:
+        lines = self.path.read_text(encoding="utf-8").splitlines()
+        merged = any(line.startswith(_MERGE_MARKERS) for line in lines)
+        headers: list[dict] = []
+        records: dict[str, set[str]] = {}
+        for line in lines:
+            if not line.strip() or line.startswith(_MERGE_MARKERS):
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                self._set_aside()
+                return
+            if "key" in entry:
+                records.setdefault(str(entry.pop("key")), set()).add(
+                    json.dumps(entry, sort_keys=True))
+            else:
+                headers.append(entry)
+        disputed = sorted(key for key, seen in records.items() if len(seen) > 1)
+        self.items = {key: json.loads(next(iter(seen))) for key, seen in records.items()
+                      if len(seen) == 1}
+        if merged or len(headers) > 1 or disputed:
+            self.notes.append("The sync base was merged from two computers; comparing "
+                              "everything with the server this time.")
+        else:
+            self.cursor = (headers[0] if headers else {}).get("cursor")
+        if disputed:
+            self.notes.append(f"{len(disputed)} item(s) were recorded differently on two "
+                              "computers and are compared afresh.")
+
+    def _set_aside(self) -> None:
+        """A base nobody can read is kept for inspection, and the run starts from none.
+
+        Starting from no base is safe — every item is compared with the server and
+        identical ones are simply recorded — but it cannot tell a deletion from an
+        item never synced, so a file deleted on one side comes back from the other.
+        """
+        broken = self.path.with_name(self.path.name + ".broken")
+        atomic_write(broken, self.path.read_bytes())
+        self.notes.append(f"The sync base could not be read; kept as {broken.name}. Comparing "
+                          "everything with the server; an item deleted on one side since the "
+                          "last sync may come back.")
 
     def save(self) -> None:
-        data = {"format": STATE_VERSION, "cursor": self.cursor, "items": self.items}
-        text = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=True)
-        atomic_write(self.path, (text + "\n").encode("utf-8"))
+        lines = [json.dumps({"format": STATE_VERSION, "cursor": self.cursor}, sort_keys=True)]
+        lines += [json.dumps({"key": key, **self.items[key]}, sort_keys=True, ensure_ascii=False)
+                  for key in sorted(self.items)]
+        atomic_write(self.path, ("\n".join(lines) + "\n").encode("utf-8"))
 
     def record(self, key: str, version: str | None, remote_sha: str | None,
                local_sha: str | None) -> None:

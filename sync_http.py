@@ -170,7 +170,10 @@ def login(server: str, store: TokenStore, *, client_name: str,
         "response_type": "code", "client_id": client_id, "redirect_uri": redirect_uri,
         "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
         "scope": SCOPE, "resource": resource})
-    print("Opening your browser to sign in. If it does not open, visit:\n  " + url)
+    # Flushed: under --no-browser, or run in the background, the address is the
+    # only way in, and a buffered print would sit unseen while the listener waits.
+    print("Sign in and approve at this address (waiting up to "
+          f"{int(timeout // 60)} minutes):\n  {url}", flush=True)
     open_browser(url)
     deadline = time.monotonic() + timeout
     try:

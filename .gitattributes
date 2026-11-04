@@ -1,0 +1,5 @@
+# sync.py's base is committed and written by every computer that syncs this corpus.
+# `union` keeps both computers' lines on a merge instead of stopping with conflict
+# markers; sync_state.py reads a merged base safely (a disputed item is compared with
+# the server afresh, a merged cursor is not trusted). See SYNC.md.
+.sync/*.state.jsonl merge=union

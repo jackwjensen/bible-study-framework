@@ -36,3 +36,4 @@ subscriptions.json
 # sync.py's report of its last run. The rest of .sync/ (remotes, the sync base) IS
 # committed — see SYNC.md. Sign-in tokens never live in the corpus at all.
 .sync/*.report.md
+.sync/*.broken

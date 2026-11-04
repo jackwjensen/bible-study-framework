@@ -312,7 +312,59 @@ def test_dry_run_changes_nothing(env: Env) -> None:
     assert code == 0 and "push" in text and "pull" in text
     assert not env.path("theirs").exists()
     assert env.server.text("finding/mine") is None
-    assert not (env.root / ".sync" / "st.state.json").exists()
+    assert not (env.root / ".sync" / "st.state.jsonl").exists()
+
+
+# ── a base two computers wrote ───────────────────────────────────────────────
+
+def _base_lines(env: Env) -> list[str]:
+    return (env.root / ".sync" / "st.state.jsonl").read_text(encoding="utf-8").splitlines()
+
+
+def _other_computer(lines: list[str]) -> list[str]:
+    """The same base as another computer recorded it: its own cursor, another version of a."""
+    other = [lines[0].replace('"cursor": "', '"cursor": "9')]
+    other += [line.replace('"version": "', '"version": "7') if '"finding/a"' in line else line
+              for line in lines[1:]]
+    return other
+
+
+@with_env
+def test_a_union_merged_base_is_compared_afresh_not_trusted(env: Env) -> None:
+    synced(env, "a")
+    synced(env, "b")
+    mine = _base_lines(env)
+    merged = mine + [line for line in _other_computer(mine) if line not in mine]  # merge=union
+    (env.root / ".sync" / "st.state.jsonl").write_text("\n".join(merged) + "\n", encoding="utf-8")
+    code, outcome, text = env.run()
+    assert code == 0 and outcome.counts == {"already the same": 1}, text
+    assert "two computers" in text
+    assert len([line for line in _base_lines(env) if '"cursor"' in line]) == 1
+    assert env.run()[1].counts == {}
+
+
+@with_env
+def test_a_base_with_conflict_markers_still_syncs_safely(env: Env) -> None:
+    synced(env, "a")
+    synced(env, "b")
+    mine = _base_lines(env)
+    other = _other_computer(mine)
+    text = "\n".join(["<<<<<<< HEAD", mine[0], mine[1], "=======", other[0], other[1],
+                      ">>>>>>> origin/master", *mine[2:]]) + "\n"
+    (env.root / ".sync" / "st.state.jsonl").write_text(text, encoding="utf-8")
+    env.server.edit("finding/b", finding("b", "Theirs."))
+    code, outcome, out = env.run()
+    assert code == 0 and outcome.counts == {"already the same": 1, "pulled": 1}, out
+    assert env.path("b").read_bytes() == finding("b", "Theirs.")
+
+
+@with_env
+def test_an_unreadable_base_is_kept_aside_and_everything_compared(env: Env) -> None:
+    synced(env, "a")
+    (env.root / ".sync" / "st.state.jsonl").write_text("{not json\n", encoding="utf-8")
+    code, outcome, text = env.run()
+    assert code == 0 and outcome.counts == {"already the same": 1}, text
+    assert (env.root / ".sync" / "st.state.jsonl.broken").read_text() == "{not json\n"
 
 
 # ── signing in ───────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -69,6 +70,8 @@ class Syncer:
         self.outcome = Outcome()
 
     def run(self) -> Outcome:
+        for note in self.state.notes:
+            print(note)
         for _ in range(MAX_PASSES):
             pushed_before = self.outcome.counts.get("pushed", 0) + self.outcome.counts.get("created", 0)
             self._pass()
@@ -291,7 +294,11 @@ def cmd_add(args: argparse.Namespace, root: Path, store: TokenStore) -> int:
 
 def cmd_login(args: argparse.Namespace, root: Path, store: TokenStore) -> int:
     _, remote = _remote(root, args.name)
-    http_login(remote["url"], store, client_name=f"bible-study-framework sync ({host_label()})")
+    # --no-browser: print the address and wait, for approving in a browser this
+    # script cannot open (another machine's, or an assistant's browser pane).
+    opener = (lambda url: None) if args.no_browser else webbrowser.open
+    http_login(remote["url"], store, client_name=f"bible-study-framework sync ({host_label()})",
+               open_browser=opener)
     print("Signed in. The sign-in is kept in your user profile, not in this corpus.")
     return 0
 
@@ -323,6 +330,9 @@ def main(argv: list[str], *, root: Path = ROOT, store: TokenStore | None = None)
         p_cmd = sub.add_parser(command, help=helptext)
         p_cmd.add_argument("name", nargs="?")
         p_cmd.set_defaults(func=func)
+        if command == "login":
+            p_cmd.add_argument("--no-browser", action="store_true",
+                               help="print the sign-in address instead of opening a browser")
     p_run = sub.add_parser("run", help="sync both ways")
     p_run.add_argument("name", nargs="?")
     p_run.add_argument("--dry-run", action="store_true", help="print the plan; change nothing")
