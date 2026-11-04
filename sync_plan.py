@@ -49,6 +49,8 @@ STILL_OPEN = "conflict still open"
 #: so two copies differing only here hold the same claim.
 _NON_CONTENT_KEYS = {"updated"}
 _LIST_KEYS = set(FINDING_LIST_FIELDS) | set(THREAD_LIST_FIELDS)
+#: The order a run handles kinds in: hubs before what is filed under them.
+_KIND_ORDER = {"theme": 0, "finding": 1, "thread": 2}
 
 
 @dataclass
@@ -115,9 +117,18 @@ def plan_item(key: str, base: dict | None, local: bytes | None, remote: dict | N
 
 def plan(base_items: dict, local: dict, remote_items: list[dict], *, listed: bool,
          conflicts_open: set[str]) -> list[Step]:
-    """Every item either side or the base knows of, decided."""
+    """Every item either side or the base knows of, decided — themes first.
+
+    Order matters for exactly one reason: a server may create a stub hub for a
+    theme a finding names but which it does not hold yet. Pushing the findings
+    first therefore had the server invent a stub for every theme, and then the
+    real theme file met that stub as an edit made on both sides — 18 false
+    conflicts on the first sync of a real corpus. Themes go first, so a finding
+    always arrives at a hub that already says what the reader wrote.
+    """
     remote = {f"{item['kind']}/{item['slug']}": item for item in remote_items}
-    keys = sorted(set(base_items) | set(local) | set(remote))
+    keys = sorted(set(base_items) | set(local) | set(remote),
+                  key=lambda key: (_KIND_ORDER.get(key.split("/", 1)[0], len(_KIND_ORDER)), key))
     return [plan_item(key, base_items.get(key), local.get(key), remote.get(key),
                       listed=listed, conflict_open=key in conflicts_open)
             for key in keys]

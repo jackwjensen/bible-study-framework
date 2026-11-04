@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import re
 import threading
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -68,6 +69,14 @@ class FakeServer:
         code = "code-" + str(len(self.codes) + 1)
         self.codes[code] = params
         return code
+
+    def stub_themes(self, markdown: bytes) -> None:
+        """Like the real server: a theme a pushed item names but nobody wrote gets a stub hub."""
+        match = re.search(r"^themes:\s*\[(.*)\]\s*$", markdown.decode("utf-8"), re.MULTILINE)
+        for theme in (part.strip() for part in (match.group(1).split(",") if match else [])):
+            key = f"theme/{theme}"
+            if theme and (key not in self.items or self.items[key]["deleted"]):
+                self.edit(key, f'---\nid: {theme}\ntitle: "{theme.title()}"\n---\n'.encode())
 
     @staticmethod
     def canonical(markdown: bytes) -> bytes:
@@ -179,6 +188,7 @@ def _handler_for(server: FakeServer):
                 return
             server.received[key] = body
             server.edit(key, FakeServer.canonical(body))
+            server.stub_themes(body)
             stored = server.items[key]
             self._send(200 if match else 201, {
                 "version": str(stored["version"]), "sha256": _sha(stored["markdown"]),

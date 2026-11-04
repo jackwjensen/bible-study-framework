@@ -101,6 +101,16 @@ def test_first_sync_pushes_local_and_pulls_remote(env: Env) -> None:
 
 
 @with_env
+def test_themes_go_first_so_the_server_never_stubs_a_hub_we_hold(env: Env) -> None:
+    theme = b'---\nid: zeta\ntitle: "Zeta, written by the reader"\n---\n\nWhat this hub is for.\n'
+    env.path("zeta", "theme").write_bytes(theme)
+    env.write("alpha", finding("alpha").replace(b"status:", b"themes: [zeta]\nstatus:"))
+    code, outcome, text = env.run()
+    assert code == 0 and outcome.counts == {"created": 2}, text
+    assert b"written by the reader" in env.server.text("theme/zeta")
+
+
+@with_env
 def test_local_edit_is_pushed(env: Env) -> None:
     synced(env, "a")
     env.write("a", finding("a", "Edited here."))
@@ -309,6 +319,7 @@ def test_dry_run_changes_nothing(env: Env) -> None:
     env.server.edit("finding/theirs", finding("theirs"))
     code, _, text = env.run(dry_run=True)
     assert code == 0 and "push" in text and "pull" in text
+    assert "Would move: 1 pull, 1 push" in text          # the summary counts the plan
     assert not env.path("theirs").exists()
     assert env.server.text("finding/mine") is None
     assert not (env.root / ".sync" / "st.state.jsonl").exists()

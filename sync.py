@@ -244,6 +244,8 @@ class Syncer:
             print(f"  {step.action:<20} {step.key}" + (f"  ({step.detail})" if step.detail else ""))
             if step.action in (CONFLICT, STILL_OPEN):
                 self.outcome.conflicts.append(step.key)
+            else:
+                self.outcome.add(step.action)   # so the summary line says what would move
 
 
 def _deleted_note(remote: str, filename: str) -> bytes:
