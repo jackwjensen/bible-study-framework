@@ -105,7 +105,7 @@ def _zip(feed: Feed, pack_id: str) -> bytes:
 
 def _handler(server: FeedServer) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
-        def do_GET(self) -> None:  # noqa: N802 (http.server's name)
+        def do_GET(self) -> None:
             status, headers, body = server.answer(self.path, self.headers.get("Authorization"))
             self.send_response(status)
             for name, value in headers.items():

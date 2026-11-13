@@ -137,6 +137,7 @@ def test_removing_a_feed_key_forgets_only_that_feed(temp: Path) -> None:
 def test_a_link_splits_into_an_address_and_a_key() -> None:
     link = parse_link(FEED + "#key=" + KEY)
     assert link.address == FEED and link.key == KEY
+    assert parse_link(FEED + "#key=a+b/c%3D").key == "a+b/c="       # '+' is not a space
     assert parse_link(FEED + "#other").key is None
     assert parse_link(FEED + "#other").address == FEED
 

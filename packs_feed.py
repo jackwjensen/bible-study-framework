@@ -78,10 +78,11 @@ def parse_link(link: str) -> FeedLink:
     parts = urllib.parse.urlsplit(link.strip())
     address = urllib.parse.urlunsplit(parts._replace(fragment=""))
     check_address(address)
-    fragment = urllib.parse.parse_qs(parts.fragment, keep_blank_values=True)
-    if "key" not in fragment:
+    # Not parse_qs: it reads `+` as a space, and a key may well contain one.
+    values = [part[4:] for part in parts.fragment.split("&") if part.startswith("key=")]
+    if not values:
         return FeedLink(address, None)
-    key = fragment["key"][0].strip()
+    key = urllib.parse.unquote(values[0]).strip()
     if key == "":
         raise FeedError(f"the link to {address} ends in '#key=' with no key; copy the whole link")
     return FeedLink(address, key)
@@ -107,7 +108,7 @@ def origin(url: str) -> tuple[str, str, int | None]:
 class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
     """Follow a redirect only where the request's rules still hold."""
 
-    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: PLR0913 (urllib's signature)
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         check_address(newurl)
         if req.has_header("Authorization") and origin(newurl) != origin(req.full_url):
             raise FeedError(f"{_without_query(req.full_url)} redirects to another host; "
