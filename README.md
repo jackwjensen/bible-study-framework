@@ -84,6 +84,7 @@ the assistant re-invents your conclusions with fresh drift each time. With one, 
 | [`packs.py`](packs.py) | Export findings for someone else; import and subscribe to theirs |
 | [`SYNC.md`](SYNC.md) | *Optional.* Keeping the corpus in step with a server, both ways |
 | [`sync.py`](sync.py) | *Optional.* The sync command (`sync_http`, `sync_plan`, `sync_state` beside it) |
+| [`user_secrets.py`](user_secrets.py) | Keeps sync sign-ins and private-feed keys in your user profile, never in the corpus |
 | `findings/` | One atomic claim per file. Yours. Starts empty |
 | `threads/` | Open questions that aren't settled claims yet |
 | `themes/` | Optional hub pages grouping findings by topic |

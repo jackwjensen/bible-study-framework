@@ -134,13 +134,15 @@ python scripts/check-source-limits.py --root .
 - CI runs the same check before validating the corpus.
 
 **The tooling is mirrored, not shared** (see the note in `CONTRIBUTING.md`): these modules and
-their tests (`test_study_text.py`, `test_study_sections.py`) also live in Jack's private corpus
-repo, and the only intended difference is the `origin` author slot — `own` here, the author's name
-there (in `study_corpus.py`'s `VALID_ORIGINS` and `study_sections.py`'s origin section). A fix to
-one must be ported to the other, or the two definitions of "valid" drift apart. The optional sync modules (`sync.py`, `sync_http.py`,
-`sync_plan.py`, `sync_state.py`, with `test_sync.py`, `test_sync_login.py` and
-`sync_testserver.py`) are copied
-**unchanged** wherever a corpus syncs; `sync_plan.py` finds the frontmatter parser in either layout.
+their tests (`test_study_text.py`, `test_study_sections.py`, `test_packs.py`), together with
+`user_secrets.py` (the per-user secret store `packs.py` and `sync_state.py` share), also live in
+Jack's private corpus repo, and the only intended difference is the `origin` author slot — `own`
+here, the author's name there (in `study_corpus.py`'s `VALID_ORIGINS` and `study_sections.py`'s
+origin section). A fix to one must be ported to the other, or the two definitions of "valid"
+drift apart. The optional sync modules (`sync.py`, `sync_http.py`, `sync_plan.py`,
+`sync_state.py`, with `test_sync.py`, `test_sync_login.py` and `sync_testserver.py`) are copied
+**unchanged** wherever a corpus syncs, and need `user_secrets.py` beside them; `sync_plan.py`
+finds the frontmatter parser in either layout.
 
 ## Housekeeping the user cannot do themselves
 

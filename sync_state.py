@@ -12,22 +12,21 @@ Two kinds of memory, kept apart on purpose:
 - **Sign-in tokens**, in the user profile, never in the corpus. A corpus is meant
   to be shared, pushed and zipped; a token in it would travel with it. On
   Windows the tokens are additionally encrypted for the signed-in Windows user
-  (DPAPI); elsewhere the file is readable by its owner only.
+  (DPAPI); elsewhere the file is readable by its owner only. The sealing itself
+  is user_secrets.py's, shared with the feed keys packs.py keeps.
 
 Standard library only.
 """
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
-import os
 import re
-import sys
-import tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
+
+from user_secrets import atomic_write, seal, unseal, user_dir, write_private
 
 #: Item kinds the protocol knows, and the corpus folder each lives in.
 KIND_DIRS = {"finding": "findings", "theme": "themes", "thread": "threads"}
@@ -60,24 +59,6 @@ def content_sha(data: bytes) -> str:
 def raw_sha(data: bytes) -> str:
     """Plain sha256 — what the server's `sha256` fields are computed over."""
     return hashlib.sha256(data).hexdigest()
-
-
-def atomic_write(path: Path, data: bytes) -> None:
-    """Write via a sibling temp file and an atomic rename.
-
-    An interrupted run must leave either the old file or the new one, never half
-    of either: a truncated state file would lose the base for every item, and a
-    truncated finding would be pushed as an edit.
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
-    try:
-        with os.fdopen(handle, "wb") as out:
-            out.write(data)
-        os.replace(temp_name, path)
-    except BaseException:
-        Path(temp_name).unlink(missing_ok=True)
-        raise
 
 
 def slug_ok(slug: str) -> bool:
@@ -246,11 +227,7 @@ class SyncState:
 # ── sign-in tokens (user profile, never the corpus) ──────────────────────────
 
 def default_token_dir() -> Path:
-    if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    return base / "bible-study-framework" / "sync"
+    return user_dir("sync")
 
 
 class TokenStore:
@@ -269,59 +246,17 @@ class TokenStore:
         if not path.exists():
             return {}
         stored = json.loads(path.read_text(encoding="utf-8"))
-        return {key: _unseal(value) if key in _SECRET_KEYS else value
+        return {key: unseal(value, remedy=_REMEDY) if key in _SECRET_KEYS else value
                 for key, value in stored.items()}
 
     def save(self, server_url: str, data: dict) -> None:
-        sealed = {key: _seal(value) if key in _SECRET_KEYS and value else value
+        sealed = {key: seal(value, remedy=_REMEDY) if key in _SECRET_KEYS and value else value
                   for key, value in data.items()}
-        path = self._path(server_url)
-        atomic_write(path, json.dumps(sealed, indent=2).encode("utf-8"))
-        if sys.platform != "win32":
-            path.chmod(0o600)
+        write_private(self._path(server_url), json.dumps(sealed, indent=2).encode("utf-8"))
 
     def delete(self, server_url: str) -> None:
         self._path(server_url).unlink(missing_ok=True)
 
 
 _SECRET_KEYS = {"access_token", "refresh_token"}
-
-
-def _seal(value: str) -> str:
-    if sys.platform == "win32":
-        return "dpapi:" + base64.b64encode(_dpapi(value.encode("utf-8"), protect=True)).decode()
-    return "plain:" + value
-
-
-def _unseal(value: str | None) -> str | None:
-    if not value:
-        return value
-    if value.startswith("dpapi:"):
-        return _dpapi(base64.b64decode(value[6:]), protect=False).decode("utf-8")
-    if value.startswith("plain:"):
-        return value[6:]
-    return None  # an unknown scheme is unreadable, not a token
-
-
-def _dpapi(data: bytes, *, protect: bool) -> bytes:
-    """Encrypt or decrypt for the current Windows user (CryptProtectData)."""
-    import ctypes
-    from ctypes import wintypes
-
-    class Blob(ctypes.Structure):
-        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
-
-    buffer = ctypes.create_string_buffer(data, len(data))
-    blob_in = Blob(len(data), ctypes.cast(buffer, ctypes.POINTER(ctypes.c_char)))
-    blob_out = Blob()
-    crypt32 = ctypes.windll.crypt32
-    call = crypt32.CryptProtectData if protect else crypt32.CryptUnprotectData
-    ui_forbidden = 0x01
-    if not call(ctypes.byref(blob_in), None, None, None, None, ui_forbidden,
-                ctypes.byref(blob_out)):
-        raise OSError("Windows could not " + ("protect" if protect else "unprotect")
-                      + " the stored sign-in; run: python sync.py login")
-    try:
-        return ctypes.string_at(blob_out.pbData, blob_out.cbData)
-    finally:
-        ctypes.windll.kernel32.LocalFree(blob_out.pbData)
+_REMEDY = "run: python sync.py login"
