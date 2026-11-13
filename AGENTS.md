@@ -107,8 +107,8 @@ by rule, and never delete a `.remote` file without the user's say — that is wh
 
 ## Engineering standards (for anyone editing the tooling, not the corpus)
 
-The Python under `build_index.py` / `packs.py` / `study_corpus.py` / `study_frontmatter.py` /
-`study_sections.py` is
+The Python under `build_index.py` / `packs*.py` / `study_corpus.py` / `study_frontmatter.py` /
+`study_sections.py` / `user_secrets.py` is
 checked by the shared standards pack. **This only concerns changes to the *code*** — writing
 findings and threads is unaffected.
 
@@ -134,7 +134,8 @@ python scripts/check-source-limits.py --root .
 - CI runs the same check before validating the corpus.
 
 **The tooling is mirrored, not shared** (see the note in `CONTRIBUTING.md`): these modules and
-their tests (`test_study_text.py`, `test_study_sections.py`, `test_packs.py`), together with
+their tests (`test_study_text.py`, `test_study_sections.py`, `test_packs.py` with
+`packs_testserver.py`), together with `packs_archive.py`, `packs_follow.py`, `packs_feed.py` and
 `user_secrets.py` (the per-user secret store `packs.py` and `sync_state.py` share), also live in
 Jack's private corpus repo, and the only intended difference is the `origin` author slot — `own`
 here, the author's name there (in `study_corpus.py`'s `VALID_ORIGINS` and `study_sections.py`'s

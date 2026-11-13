@@ -81,7 +81,7 @@ the assistant re-invents your conclusions with fresh drift each time. With one, 
 | [`study_corpus.py`](study_corpus.py) | Vocabularies, paths, and the loaders. Import from here |
 | [`study_frontmatter.py`](study_frontmatter.py) | Reads a Markdown file's YAML frontmatter; knows nothing about findings |
 | [`study_sections.py`](study_sections.py) | Renders loaded records into `INDEX.md`'s Markdown sections |
-| [`packs.py`](packs.py) | Export findings for someone else; import and subscribe to theirs |
+| [`packs.py`](packs.py) | Export findings for someone else; import and subscribe to theirs (`packs_archive`, `packs_follow`, `packs_feed` beside it) |
 | [`SYNC.md`](SYNC.md) | *Optional.* Keeping the corpus in step with a server, both ways |
 | [`sync.py`](sync.py) | *Optional.* The sync command (`sync_http`, `sync_plan`, `sync_state` beside it) |
 | [`user_secrets.py`](user_secrets.py) | Keeps sync sign-ins and private-feed keys in your user profile, never in the corpus |

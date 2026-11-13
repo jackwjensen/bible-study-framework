@@ -9,12 +9,20 @@ registry, no account, and nobody approves anything.
     python packs.py export --out my-pack.zip --title "Spiritual gifts" \
         --author "Your Name" --author-id yourname
     python packs.py import received-pack.zip
-    python packs.py subscribe https://example.com/feed.json
+    python packs.py subscribe https://example.com/feeds/abc123/feed.json
+    python packs.py subscribe 'https://example.com/feeds/abc123/feed.json#key=…'
     python packs.py check            # any subscribed pack newer than what you have?
     python packs.py pull             # fetch + import updates from subscriptions
+    python packs.py unsubscribe https://example.com/feeds/abc123/feed.json
 
 Imported findings land in `imported/<author-id>/` and are READ-ONLY. They are
 never merged into your own `findings/` — see PACKS.md for why that matters.
+
+This file is the command line. The work is in four modules, each with one job:
+packs_archive.py (the pack format: export and import), packs_follow.py
+(subscriptions), packs_feed.py (reading a feed over the network, and the rules
+that keep a private feed's key safe) and user_secrets.py (where that key is
+kept: the user profile, never subscriptions.json, which is meant to be committed).
 
 Standard library only.
 """
@@ -22,390 +30,23 @@ Standard library only.
 from __future__ import annotations
 
 import argparse
-import json
-import shutil
 import sys
-import urllib.request
-import zipfile
-from pathlib import Path
 
-from study_corpus import FINDINGS_DIR, IMPORTED_DIR, MANIFEST_NAME, STUDY_DIR
-from study_frontmatter import load_content, normalize_list
-from study_text import romanize
+from packs_archive import cmd_export, cmd_import, ensure_imported_dir
+from packs_feed import FeedError, redact
+from packs_follow import cmd_check, cmd_pull, cmd_subscribe, cmd_unsubscribe
+from user_secrets import FeedKeyStore
 
-ROOT = STUDY_DIR
-SUBSCRIPTIONS_FILE = ROOT / "subscriptions.json"
 
-USER_AGENT = "bible-study-framework-packs/1"
-MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024  # a findings pack is text; 25 MB is already absurd
+class _Parser(argparse.ArgumentParser):
+    """argparse echoes arguments it rejects; a pasted private link must not be among them."""
 
+    def error(self, message: str):
+        super().error(redact(message))
 
-# ── helpers ──────────────────────────────────────────────────────────────────
 
-def die(message: str) -> None:
-    print(f"error: {message}", file=sys.stderr)
-    raise SystemExit(1)
-
-
-def safe_member_path(name: str) -> Path | None:
-    """
-    Resolve a zip member to a safe relative path, or None if it must be refused.
-
-    Guards against zip-slip ("../../etc/passwd"), absolute paths, and drive
-    letters. Only `pack.md` and `findings/*.md` are ever accepted — a pack is
-    text, and nothing else has any business being extracted.
-    """
-    name = name.replace("\\", "/")
-    if name.startswith("/") or ":" in name:
-        return None
-    parts = [p for p in name.split("/") if p not in ("", ".")]
-    if any(p == ".." for p in parts):
-        return None
-    if not parts:
-        return None
-    if parts == [MANIFEST_NAME]:
-        return Path(MANIFEST_NAME)
-    if len(parts) == 2 and parts[0] == "findings" and parts[1].endswith(".md"):
-        return Path("findings") / parts[1]
-    return None
-
-
-def read_manifest(path: Path) -> dict:
-    parsed = load_content(path)
-    if parsed is None:
-        die(f"no manifest at {path}")
-    meta = parsed["meta"]
-    for field in ("pack", "title", "author", "author_id"):
-        if not str(meta.get(field, "") or "").strip():
-            die(f"manifest is missing required field '{field}'")
-    return meta
-
-
-def slug_ok(value: str) -> bool:
-    """Whether this may be an author id — a folder name on every subscriber's disk.
-
-    ASCII, deliberately. `isalnum()` alone is Unicode-aware and used to accept
-    `guds-nåde`, which then became a directory name, a URL segment and half a
-    download filename on machines whose filesystems normalise, whose terminals
-    cannot render it, and whose HTTP stack must percent-encode it. Underscore is
-    allowed here and not in an id, because an author id is a folder, never a
-    [[wikilink]] target.
-    """
-    return value != "" and value.isascii() and all(c.isalnum() or c in "-_" for c in value)
-
-
-def slugify(text: str) -> str:
-    """A kebab-case id in the alphabet [[wikilinks]] can name.
-
-    Romanised first, so a title in Hebrew, Greek or Danish yields something that
-    says what it is about. Before that, `isalnum()` was Unicode-aware and simply
-    *kept* the original letters — `שלום` slugged to `שלום`, which slug_ok
-    approved and no `[[…]]` could ever match. See study_text.romanize for why
-    this transliterates rather than translates.
-    """
-    lowered = romanize(text).lower()
-    out = [character if _is_slug_character(character) else "-" for character in lowered]
-    return "-".join(part for part in "".join(out).split("-") if part)
-
-
-def _is_slug_character(character: str) -> bool:
-    """ASCII alphanumeric. Spelled out because `isalnum()` is not that."""
-    return character.isascii() and character.isalnum()
-
-
-def default_pack_id(author_id: str, themes: str | None, title: str, is_everything: bool) -> str:
-    """
-    Derive a pack id when one is not given.
-
-    Named after *what is in it*, so a second pack never collides with the first:
-    the theme(s) when exporting by theme, "all" for a whole-corpus export, and a
-    slug of the title for an explicit list of findings.
-    """
-    if themes:
-        suffix = "-".join(slugify(t) for t in sorted(t.strip() for t in themes.split(",")) if t.strip())
-    elif is_everything:
-        suffix = "all"
-    else:
-        suffix = slugify(title)
-        if len(suffix) > 40:                      # trim at a word boundary, not mid-word
-            suffix = suffix[:40].rsplit("-", 1)[0]
-        suffix = suffix or "selection"
-    return f"{author_id}-{suffix}"
-
-
-# ── export ───────────────────────────────────────────────────────────────────
-
-def cmd_export(args: argparse.Namespace) -> int:
-    if not slug_ok(args.author_id):
-        die("--author-id must be letters, digits, dashes or underscores")
-
-    selected = sorted(FINDINGS_DIR.glob("*.md"))
-    if args.findings:
-        wanted = {f.strip() for f in args.findings.split(",") if f.strip()}
-        selected = [p for p in selected if p.stem in wanted]
-        missing = wanted - {p.stem for p in selected}
-        if missing:
-            die("no such finding(s): " + ", ".join(sorted(missing)))
-    if args.themes:
-        wanted_themes = {t.strip() for t in args.themes.split(",") if t.strip()}
-        kept = []
-        for path in selected:
-            parsed = load_content(path)
-            if parsed and wanted_themes & set(normalize_list(parsed["meta"].get("themes"))):
-                kept.append(path)
-        selected = kept
-
-    if not selected:
-        die("nothing selected — no findings matched")
-
-    pack_id = args.pack or default_pack_id(
-        args.author_id, args.themes, args.title,
-        is_everything=not (args.findings or args.themes))
-    manifest = "\n".join([
-        "---",
-        f"pack: {pack_id}",
-        f'title: "{args.title}"',
-        f'author: "{args.author}"',
-        f"author_id: {args.author_id}",
-        f"version: {args.version}",
-        f'license: "{args.license}"',
-        f"findings: {len(selected)}",
-    ] + ([f"homepage: {args.homepage}"] if args.homepage else []) + [
-        "---",
-        "",
-        f"# {args.title}",
-        "",
-        args.description or "A pack of biblical-study findings.",
-        "",
-        "Findings in this pack are the author's own work. Importing them places them in",
-        "`imported/` as read-only reference material — they do not become your findings.",
-        "",
-    ])
-
-    out_path = Path(args.out)
-    with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        zf.writestr(MANIFEST_NAME, manifest)
-        for path in selected:
-            zf.write(path, f"findings/{path.name}")
-
-    print(f"Wrote {out_path} — {len(selected)} findings, pack '{pack_id}' v{args.version}.")
-    print("Share it however you like. Recipients run: python packs.py import <file>")
-    return 0
-
-
-# ── import ───────────────────────────────────────────────────────────────────
-
-def import_zip(zip_path: Path, *, assume_yes: bool = False) -> int:
-    if not zip_path.exists():
-        die(f"no such file: {zip_path}")
-
-    with zipfile.ZipFile(zip_path) as zf:
-        members = {}
-        for info in zf.infolist():
-            if info.is_dir():
-                continue
-            target = safe_member_path(info.filename)
-            if target is None:
-                print(f"  skipped (refused): {info.filename}", file=sys.stderr)
-                continue
-            members[target] = info
-
-        manifest_member = members.get(Path(MANIFEST_NAME))
-        if manifest_member is None:
-            die(f"{zip_path.name} has no {MANIFEST_NAME} — not a findings pack")
-
-        staging = IMPORTED_DIR / ".staging"
-        if staging.exists():
-            shutil.rmtree(staging)
-        staging.mkdir(parents=True)
-        for target, info in members.items():
-            dest = staging / target
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with zf.open(info) as src, open(dest, "wb") as out:
-                shutil.copyfileobj(src, out, length=1024 * 1024)
-
-    meta = read_manifest(staging / MANIFEST_NAME)
-    author_id = str(meta["author_id"]).strip()
-    if not slug_ok(author_id):
-        shutil.rmtree(staging)
-        die(f"manifest author_id '{author_id}' is not a safe directory name")
-
-    incoming = sorted((staging / "findings").glob("*.md")) if (staging / "findings").exists() else []
-    if not incoming:
-        shutil.rmtree(staging)
-        die("pack contains no findings")
-
-    # Warn about ids that collide with the user's own work. Not fatal — imports are
-    # namespaced by author — but worth seeing, since it usually means shared lineage.
-    own_ids = {p.stem for p in FINDINGS_DIR.glob("*.md")}
-    collisions = sorted({p.stem for p in incoming} & own_ids)
-
-    print(f"\nPack:     {meta['title']}  ({meta['pack']})")
-    print(f"Author:   {meta['author']}  [{author_id}]")
-    print(f"Version:  {meta.get('version', '(none)')}")
-    print(f"Licence:  {meta.get('license', '(unstated)')}")
-    print(f"Findings: {len(incoming)}")
-    if collisions:
-        print(f"Note:     {len(collisions)} id(s) also exist in your own findings/: "
-              + ", ".join(collisions[:5]) + ("…" if len(collisions) > 5 else ""))
-    print("\nThese will be written to imported/%s/ as READ-ONLY reference material." % author_id)
-    print("They do NOT become your findings. To use one, write your own finding that")
-    print("builds_on or tension_with it.\n")
-
-    if not assume_yes:
-        answer = input("Import? [y/N] ").strip().lower()
-        if answer not in ("y", "yes"):
-            shutil.rmtree(staging)
-            print("Aborted; nothing written.")
-            return 1
-
-    dest_dir = IMPORTED_DIR / author_id
-    if dest_dir.exists():
-        shutil.rmtree(dest_dir)
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(staging / MANIFEST_NAME, dest_dir / MANIFEST_NAME)
-    (dest_dir / "findings").mkdir(exist_ok=True)
-    for path in incoming:
-        shutil.copy2(path, dest_dir / "findings" / path.name)
-    shutil.rmtree(staging)
-
-    print(f"Imported {len(incoming)} findings to imported/{author_id}/")
-    print("Run: python build_index.py")
-    return 0
-
-
-def cmd_import(args: argparse.Namespace) -> int:
-    return import_zip(Path(args.zipfile), assume_yes=args.yes)
-
-
-# ── subscriptions ────────────────────────────────────────────────────────────
-
-def load_subscriptions() -> list[dict]:
-    if not SUBSCRIPTIONS_FILE.exists():
-        return []
-    try:
-        data = json.loads(SUBSCRIPTIONS_FILE.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        die(f"subscriptions.json is not valid JSON: {exc}")
-    return data.get("feeds", [])
-
-
-def save_subscriptions(feeds: list[dict]) -> None:
-    SUBSCRIPTIONS_FILE.write_text(
-        json.dumps({"feeds": feeds}, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8", newline="\n")
-
-
-def fetch(url: str) -> bytes:
-    if not url.lower().startswith("https://"):
-        die(f"refusing to fetch a non-HTTPS url: {url}")
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=30) as response:  # noqa: S310 (scheme checked)
-        data = response.read(MAX_DOWNLOAD_BYTES + 1)
-    if len(data) > MAX_DOWNLOAD_BYTES:
-        die(f"refusing oversized download (> {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB): {url}")
-    return data
-
-
-def read_feed(url: str) -> dict:
-    try:
-        return json.loads(fetch(url).decode("utf-8"))
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-        die(f"feed at {url} is not valid JSON: {exc}")
-    except OSError as exc:
-        die(f"could not reach {url}: {exc}")
-    return {}
-
-
-def installed_version(author_id: str, pack_id: str) -> str | None:
-    manifest = IMPORTED_DIR / author_id / MANIFEST_NAME
-    if not manifest.exists():
-        return None
-    parsed = load_content(manifest)
-    if not parsed or str(parsed["meta"].get("pack", "")).strip() != pack_id:
-        return None
-    return str(parsed["meta"].get("version", "") or "").strip() or None
-
-
-def cmd_subscribe(args: argparse.Namespace) -> int:
-    feeds = load_subscriptions()
-    if any(f["url"] == args.url for f in feeds):
-        print("Already subscribed.")
-        return 0
-    feed = read_feed(args.url)
-    feeds.append({"url": args.url, "author": feed.get("author", "(unknown)")})
-    save_subscriptions(feeds)
-    print(f"Subscribed to {feed.get('author', args.url)} — {len(feed.get('packs', []))} pack(s) offered.")
-    print("Run: python packs.py check")
-    return 0
-
-
-def survey() -> list[tuple[dict, dict, str | None]]:
-    """Return (feed, pack, installed_version) for every pack across subscriptions."""
-    rows = []
-    for subscription in load_subscriptions():
-        feed = read_feed(subscription["url"])
-        author_id = str(feed.get("author_id", "")).strip()
-        for pack in feed.get("packs", []):
-            rows.append((feed, pack, installed_version(author_id, str(pack.get("pack", "")))))
-    return rows
-
-
-def cmd_check(args: argparse.Namespace) -> int:
-    rows = survey()
-    if not rows:
-        print("No subscriptions yet. Add one: python packs.py subscribe <https://…/feed.json>")
-        return 0
-    updates = 0
-    for feed, pack, have in rows:
-        offered = str(pack.get("version", "")).strip()
-        if have is None:
-            state = "not imported"
-        elif have != offered:
-            state = f"UPDATE available (you have {have})"
-            updates += 1
-        else:
-            state = "up to date"
-        print(f"- {feed.get('author', '?')} / {pack.get('title', pack.get('pack'))} "
-              f"v{offered} — {state}")
-    if updates:
-        print(f"\n{updates} update(s). Run: python packs.py pull")
-    return 0
-
-
-def cmd_pull(args: argparse.Namespace) -> int:
-    rows = survey()
-    pulled = 0
-    for feed, pack, have in rows:
-        offered = str(pack.get("version", "")).strip()
-        if have == offered:
-            continue
-        if have is None and not args.all:
-            print(f"- skipping {pack.get('pack')} (not yet imported; use --all to add it)")
-            continue
-        url = str(pack.get("url", "")).strip()
-        if not url:
-            print(f"- {pack.get('pack')}: feed entry has no url", file=sys.stderr)
-            continue
-        print(f"\nFetching {pack.get('title', pack.get('pack'))} v{offered} …")
-        tmp = IMPORTED_DIR / f".download-{pack.get('pack')}.zip"
-        tmp.parent.mkdir(parents=True, exist_ok=True)
-        tmp.write_bytes(fetch(url))
-        try:
-            if import_zip(tmp, assume_yes=args.yes) == 0:
-                pulled += 1
-        finally:
-            tmp.unlink(missing_ok=True)
-    print(f"\n{pulled} pack(s) updated." if pulled else "\nNothing to update.")
-    if pulled:
-        print("Run: python build_index.py")
-    return 0
-
-
-# ── main ─────────────────────────────────────────────────────────────────────
-
-def main(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(description="Share and receive packs of findings.")
+def main(argv: list[str], *, keys: FeedKeyStore | None = None) -> int:
+    parser = _Parser(description="Share and receive packs of findings.")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_export = sub.add_parser("export", help="build a shareable zip from your findings")
@@ -427,9 +68,13 @@ def main(argv: list[str]) -> int:
     p_import.add_argument("-y", "--yes", action="store_true", help="skip the confirmation prompt")
     p_import.set_defaults(func=cmd_import)
 
-    p_sub = sub.add_parser("subscribe", help="follow someone's published feed")
-    p_sub.add_argument("url")
+    p_sub = sub.add_parser("subscribe", help="follow someone's feed, from the link they gave you")
+    p_sub.add_argument("url", help="the feed link as given; a private one ends in #key=…")
     p_sub.set_defaults(func=cmd_subscribe)
+
+    p_unsub = sub.add_parser("unsubscribe", help="stop following a feed and forget its key")
+    p_unsub.add_argument("url", help="the feed's address (or its link)")
+    p_unsub.set_defaults(func=cmd_unsubscribe)
 
     p_check = sub.add_parser("check", help="list subscribed packs and available updates")
     p_check.set_defaults(func=cmd_check)
@@ -447,8 +92,13 @@ def main(argv: list[str]) -> int:
             stream.reconfigure(encoding="utf-8", errors="replace")
 
     args = parser.parse_args(argv[1:])
-    IMPORTED_DIR.mkdir(exist_ok=True)
-    return args.func(args)
+    args.keys = keys or FeedKeyStore()
+    ensure_imported_dir()
+    try:
+        return args.func(args)
+    except FeedError as error:
+        print(f"error: {redact(str(error))}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

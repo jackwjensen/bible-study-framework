@@ -115,13 +115,25 @@ corpus — and it lets you share the settled parts while keeping your half-forme
 
 ## Subscriptions
 
-If someone publishes a **feed** — a JSON file at a URL they control — you can follow it and be told when
-their packs change.
+If someone publishes a **feed** — a JSON file at a URL — you can follow it and be told when their
+packs change. Which tool is for what:
+
+| Purpose | Tool | Direction | Who can read |
+|---|---|---|---|
+| A public feed | `packs.py` | one way, read-only into `imported/` | anyone; findable in a public list |
+| A private feed | `packs.py` | one way, read-only into `imported/` | whoever the publisher gave a link |
+| Your own devices | `sync.py` | two-way, your own `findings/`, `themes/`, `threads/` | you, signed in |
+
+**Never follow your own feed.** The same findings would land in `imported/` beside the originals. Your
+own work moves between your computers by [sync](SYNC.md). If you pull a pack whose findings are all
+already in your `findings/`, `pull` says it looks like your own work — and still imports it, since it
+cannot know whose feed an address is.
 
 ```bash
-python packs.py subscribe https://example.com/study/feed.json
+python packs.py subscribe https://example.com/feeds/k3x9q/feed.json
 python packs.py check     # what's new?
 python packs.py pull      # fetch and import updates
+python packs.py unsubscribe https://example.com/feeds/k3x9q/feed.json
 ```
 
 `check` compares each offered version against what you already have in `imported/`, so you find out when
@@ -129,17 +141,57 @@ something you're standing on has moved. That is the real reason to bother with v
 finding you imported as `established` may since have been marked `retired` by its author, and you would
 otherwise never know.
 
-`pull` only updates packs you already have, unless you pass `--all`.
+`pull` only updates packs you already have, unless you pass `--all`. A feed that cannot be read is
+reported and skipped; the others are still checked, and the command exits non-zero so a script notices.
+
+`unsubscribe` removes the feed from `subscriptions.json` and forgets its key. Findings you already
+imported from it stay in `imported/`; delete that folder yourself if you no longer want them.
+
+Older addresses of the form `https://<site>/packs/<name>/feed.json` keep working, without a key.
+
+### Private feeds
+
+A private feed is read only by people its publisher gave a **link**. The link is the feed's address
+with the key on the end:
+
+```bash
+python packs.py subscribe 'https://example.com/feeds/k3x9q/feed.json#key=…'
+```
+
+Paste the whole link, in quotes. What happens to it:
+
+- **`subscriptions.json` records the address only** — without `#key=…`, exactly as for a public feed,
+  plus `"private": true`. That file is safe to commit and share; it never holds a key.
+- **The key is kept in your user profile on this computer**, beside the sync sign-in:
+  `%APPDATA%\bible-study-framework\feeds\` on Windows, encrypted for your Windows user;
+  `~/.config/bible-study-framework/feeds/` elsewhere, readable by you only.
+- **The key is sent only to the feed's own host**, as an `Authorization` header — the part after `#`
+  in a link is never sent to any server. A pack hosted somewhere else is fetched without it, and a
+  redirect to another host is refused rather than followed with the key.
+- **The key is never printed** — not by `check`, `pull`, or an error. Output names the address.
+
+**On a second computer** the cloned corpus lists the feed but has no key, so `check` and `pull` say
+*this feed needs its link on this computer* and carry on with the others. Run `subscribe` with the
+same link there; it stores the key and changes nothing else.
+
+**If a link stops working**, `check` says the feed does not accept the stored key: the publisher may
+have revoked the link. Ask them for a new one and `subscribe` with it. (A private feed answers exactly
+like a feed that does not exist when the key is wrong — that is deliberate, so nobody can probe for it.)
+
+Anyone holding the link can read the feed, so treat it like a password: send it privately, never paste
+it into a file you commit, and never into a chat with an assistant you would not hand the key to.
 
 ### Publishing a feed
 
 Host a `feed.json` anywhere you can serve a file over HTTPS — your own site, a static host, object
-storage. You host your own packs; nobody else is responsible for them.
+storage, or a server that hosts feeds for you. A private feed needs a host that checks the key; a
+plain file host can only serve a public one.
 
 ```json
 {
   "author": "Your Name",
   "author_id": "yourname",
+  "feed": {"code": "k3x9q", "title": "My study notes", "description": "Optional."},
   "packs": [
     {
       "pack": "yourname-spiritual-gifts",
@@ -154,7 +206,11 @@ storage. You host your own packs; nobody else is responsible for them.
 ```
 
 Update the `version` when you republish a pack. That single field is what tells subscribers there is
-something new.
+something new. The `feed` object is optional; a feed without it is read the same way.
+
+A private feed answers both the feed and its packs only with `Authorization: Bearer <key>`, and `404`
+otherwise — the same answer as for a feed that does not exist. Hand readers the link
+`<feed address>#key=<key>`.
 
 ## Deliberately not built: a central registry
 
@@ -166,6 +222,9 @@ doctrine; write acceptance criteria and you have authored a statement of faith.
 Subscriptions avoid the problem entirely. Trust is per-person, decided by each reader, and no one sits
 in the middle. Share pack files directly, or publish a feed and let people choose to follow it.
 
+A server that hosts feeds may list its own public ones. That list is the host's, not this
+framework's: nothing here reads it, and you follow a feed by its address whoever hosts it.
+
 ## Safety notes
 
 A pack is a file from someone else, so `import` is careful with it:
@@ -173,7 +232,9 @@ A pack is a file from someone else, so `import` is careful with it:
 - **Only `pack.md` and `findings/*.md` are extracted.** Everything else is refused and reported.
 - **Path traversal is blocked** — absolute paths, drive letters, and `..` segments are rejected rather
   than sanitised, so a malicious archive cannot write outside `imported/`.
-- **Feeds and downloads must be HTTPS**, and downloads are size-capped.
+- **Feeds and downloads must be HTTPS** (plain HTTP only to this computer, for testing a local
+  server), and downloads are size-capped. A redirect must stay on
+  HTTPS too, and while a private feed's key is in play it must stay on the same host.
 - **Nothing is written until you confirm**, and you see the author, version, licence and finding count
   first.
 
