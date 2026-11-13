@@ -8,6 +8,7 @@ server; the protocol is in SYNC.md and any server may implement it).
 
     python sync.py add sourcetext https://sourcetext.ai --corpus bible
     python sync.py login                 # once per computer: approve in the browser
+    python sync.py login --name laptop   # ... listed on the server as "laptop", not the host name
     python sync.py run --dry-run         # what would move, and why
     python sync.py run                   # move it
     python sync.py logout                # revoke this computer's sign-in
@@ -29,7 +30,9 @@ import webbrowser
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from sync_http import ApiError, Client, CursorUnknown, SyncError, check_server_url, host_label
+from sync_http import (
+    ApiError, Client, CursorUnknown, SyncError, check_server_url, client_name_for, host_label,
+)
 from sync_http import login as http_login
 from sync_http import logout as http_logout
 from sync_plan import (
@@ -311,8 +314,8 @@ def cmd_login(args: argparse.Namespace, root: Path, store: TokenStore) -> int:
     # --no-browser: print the address and wait, for approving in a browser this
     # script cannot open (another machine's, or an assistant's browser pane).
     opener = (lambda url: None) if args.no_browser else webbrowser.open
-    http_login(remote["url"], store, client_name=f"bible-study-framework sync ({host_label()})",
-               open_browser=opener)
+    label = (args.label or "").strip() or host_label()
+    http_login(remote["url"], store, client_name=client_name_for(label), open_browser=opener)
     print("Signed in. The sign-in is kept in your user profile, not in this corpus.")
     return 0
 
@@ -347,6 +350,9 @@ def main(argv: list[str], *, root: Path = ROOT, store: TokenStore | None = None)
         if command == "login":
             p_cmd.add_argument("--no-browser", action="store_true",
                                help="print the sign-in address instead of opening a browser")
+            p_cmd.add_argument("--name", dest="label", metavar="LABEL",
+                               help="what the server lists this computer as "
+                                    "(default: this computer's host name)")
     p_run = sub.add_parser("run", help="sync both ways")
     p_run.add_argument("name", nargs="?")
     p_run.add_argument("--dry-run", action="store_true", help="print the plan; change nothing")

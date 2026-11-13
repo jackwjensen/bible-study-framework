@@ -37,6 +37,8 @@ class FakeServer:
         self.consent = True
         self.available = True
         self.foreign_metadata = False   # a dev server still configured with prod's address
+        self.registered: list[str] = []  # the client_name of every registration, in order
+        self.revoked: list[str] = []     # every token a client revoked
         self.lock = threading.Lock()
         self.httpd = ThreadingHTTPServer(("127.0.0.1", 0), _handler_for(self))
         self.url = f"http://127.0.0.1:{self.httpd.server_address[1]}"
@@ -216,10 +218,12 @@ def _handler_for(server: FakeServer):
         def do_POST(self) -> None:
             path = urllib.parse.urlsplit(self.path).path
             if path == "/register":
-                self._send(201, {"client_id": "client-1"})
+                server.registered.append(str(json.loads(self._body()).get("client_name", "")))
+                self._send(201, {"client_id": f"client-{len(server.registered)}"})
                 return
             form = {k: v[0] for k, v in urllib.parse.parse_qs(self._body().decode()).items()}
             if path == "/revoke":
+                server.revoked.append(form.get("token", ""))
                 self._send(200, {})
             elif form.get("grant_type") == "authorization_code":
                 self._exchange(form)

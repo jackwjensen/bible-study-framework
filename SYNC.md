@@ -6,6 +6,11 @@ server, no account and no network. `sync.py` is one more command, for people who
 findings in a tool that speaks the protocol below — [SourceText](https://sourcetext.ai) is one; any
 server may implement it.
 
+Sync is for **your own work on your own computers**. Reading someone else's findings — a public feed,
+or a private one they gave you a link to — is [`packs.py`](PACKS.md#subscriptions), one way into
+`imported/`; the table there says which tool is for what. Never follow your own feed to reach your
+own work on another computer: that is what sync is for.
+
 Sync is **two-way** and **never last-write-wins**. Every item is compared three ways: the file here,
 the item on the server, and how both looked the last time they agreed (the *base*).
 
@@ -39,6 +44,11 @@ for your Windows user; `~/.config/bible-study-framework/sync/` elsewhere, readab
 corpus can be pushed, zipped or shared without carrying it, and each computer signs in once.
 `python sync.py logout` revokes this computer's sign-in. `python sync.py login --no-browser` prints
 the sign-in address instead of opening a browser, and waits — for approving it in a browser elsewhere.
+
+The server lists each signed-in computer by name, `bible-study-framework sync (<host name>)`, and
+`login` prints that name before the browser opens. `python sync.py login --name "study laptop"` uses
+your own label instead of the host name. Signing in under a different name than before registers this
+computer afresh, and once the new sign-in is stored, revokes the one it replaces.
 
 ### What to commit
 
@@ -102,7 +112,8 @@ Written for anyone implementing a server. `{root}` is the server's root address,
    `token_endpoint`, `registration_endpoint`; `revocation_endpoint` is used when present.
 2. Register once (RFC 7591): `redirect_uris: ["http://127.0.0.1/callback"]` (no port),
    `grant_types: ["authorization_code", "refresh_token"]`, `token_endpoint_auth_method: "none"`,
-   `scope: "study"`. The server must accept any port on that loopback URI (RFC 8252 §7.3).
+   `scope: "study"`, and `client_name: "bible-study-framework sync (<label>)"` — the name the server
+   should list the computer under. The server must accept any port on that loopback URI (RFC 8252 §7.3).
 3. Authorise with PKCE S256, `scope=study` and `resource={root}/api/sync/v1` (RFC 8707); exchange
    the code with the same `resource`. Refresh tokens may rotate; the client stores each new one at
    once.

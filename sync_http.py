@@ -168,10 +168,22 @@ class _Callback(http.server.BaseHTTPRequestHandler):
 def login(server: str, store: TokenStore, *, client_name: str,
           open_browser: Callable[[str], object] = webbrowser.open,
           timeout: float = LOGIN_TIMEOUT_SECONDS) -> None:
-    """The one browser sign-in. Stores tokens in the user profile, never the corpus."""
+    """The one browser sign-in. Stores tokens in the user profile, never the corpus.
+
+    `client_name` is what the server lists this computer under. A server learns
+    it only when a client registers, so signing in under a new name registers
+    afresh and, once the new sign-in is stored, revokes the one it replaced.
+    """
     meta = discover(server)
     saved = store.load(server)
-    client_id = saved.get("client_id") or _register(meta, client_name)
+    # A record from before names were stored was registered under the host label.
+    registered_as = saved.get("client_name") or client_name_for(host_label())
+    client_id = saved.get("client_id")
+    replaced: dict | None = None
+    if client_id is None or registered_as != client_name:
+        replaced = saved if client_id is not None else None
+        client_id = _register(meta, client_name)
+    print(f"The server will list this computer as: {client_name}", flush=True)
     resource = server + API_PREFIX
     verifier = secrets.token_urlsafe(48)
     challenge = base64.urlsafe_b64encode(
@@ -211,24 +223,39 @@ def login(server: str, store: TokenStore, *, client_name: str,
         "code_verifier": verifier, "resource": resource})
     if status != 200 or "access_token" not in tokens:
         raise SyncError(f"the server refused the sign-in code ({status} {tokens.get('error', '')})")
-    store.save(server, _token_record(meta, client_id, tokens))
+    store.save(server, _token_record(meta, client_id, tokens, client_name))
+    if replaced is not None:
+        try:
+            _revoke(replaced)
+        except SyncError:
+            print("Signed in under the new name, but the sign-in it replaces could not be "
+                  "revoked; remove it on the server.", flush=True)
 
 
-def _token_record(meta: dict, client_id: str, tokens: dict) -> dict:
+def _token_record(meta: dict, client_id: str, tokens: dict, client_name: str | None) -> dict:
     lifetime = int(tokens.get("expires_in") or 0)
-    return {"client_id": client_id, "token_endpoint": meta["token_endpoint"],
+    return {"client_id": client_id, "client_name": client_name,
+            "token_endpoint": meta["token_endpoint"],
             "revocation_endpoint": meta.get("revocation_endpoint"),
             "access_token": tokens["access_token"],
             "refresh_token": tokens.get("refresh_token"),
             "expires_at": time.time() + lifetime if lifetime else None}
 
 
-def logout(server: str, store: TokenStore) -> None:
-    saved = store.load(server)
+def client_name_for(label: str) -> str:
+    """The name a server lists a sign-in under: the tool, and which computer."""
+    return f"bible-study-framework sync ({label})"
+
+
+def _revoke(saved: dict) -> None:
     endpoint = saved.get("revocation_endpoint")
     for kind in ("refresh_token", "access_token"):
         if endpoint and saved.get(kind):
             _form(endpoint, {"token": saved[kind], "client_id": saved.get("client_id", "")})
+
+
+def logout(server: str, store: TokenStore) -> None:
+    _revoke(store.load(server))
     store.delete(server)
 
 
@@ -260,7 +287,8 @@ class Client:
         # so the new one is stored before anything else can fail.
         meta = {"token_endpoint": self.tokens["token_endpoint"],
                 "revocation_endpoint": self.tokens.get("revocation_endpoint")}
-        record = _token_record(meta, self.tokens["client_id"], tokens)
+        record = _token_record(meta, self.tokens["client_id"], tokens,
+                               self.tokens.get("client_name"))
         if not record["refresh_token"]:
             record["refresh_token"] = refresh
         self.tokens = record
