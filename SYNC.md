@@ -38,7 +38,9 @@ python build_index.py           # if anything was pulled
 
 `add` writes `.sync/remotes.json` — commit it, it holds no secret. `login` opens your browser on the
 server's own sign-in page; you approve there, and the browser hands a one-time code back to this
-script on `127.0.0.1`. Your password never passes through the script. The sign-in is stored in **your
+script on `127.0.0.1`. Your password never passes through the script. The browser tab then says
+whether the sign-in completed, was not approved, or failed and why — it is answered only after the
+code has been exchanged and stored, so "signed in" there is true. The sign-in is stored in **your
 user profile**, never in the corpus (`%APPDATA%\bible-study-framework\sync\` on Windows, encrypted
 for your Windows user; `~/.config/bible-study-framework/sync/` elsewhere, readable by you only). So a
 corpus can be pushed, zipped or shared without carrying it, and each computer signs in once.

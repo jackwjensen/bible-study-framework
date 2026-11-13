@@ -27,6 +27,7 @@ import webbrowser
 from collections.abc import Callable
 from typing import ClassVar
 
+import sync_page
 from sync_state import TokenStore
 
 USER_AGENT = "bible-study-framework-sync/1"
@@ -146,20 +147,31 @@ def _register(meta: dict, client_name: str) -> str:
 
 
 class _Callback(http.server.BaseHTTPRequestHandler):
+    """The loopback listener's one page.
+
+    It finishes the sign-in *before* answering, through `complete`, so the browser
+    is told what actually happened rather than that the code arrived. (Not named
+    `finish`: the base handler calls its own `finish()` after every request.)
+    """
+
     result: ClassVar[dict] = {}
+    complete: ClassVar[Callable[[dict], sync_page.Outcome] | None] = None
 
     def do_GET(self) -> None:
-        query = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-        if urllib.parse.urlsplit(self.path).path != "/callback":
+        parts = urllib.parse.urlsplit(self.path)
+        if parts.path != "/callback" or _Callback.result:
             self.send_response(404)
             self.end_headers()
             return
-        type(self).result = {key: values[0] for key, values in query.items()}
+        answer = {key: values[0] for key, values in urllib.parse.parse_qs(parts.query).items()}
+        complete = type(self).complete
+        outcome = complete(answer) if complete else sync_page.failed("The sign-in was not expected.")
+        type(self).result = {**answer, "outcome": outcome}
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(b"<p>Signed in. You can close this tab and return to the terminal.</p>"
-)
+        self.wfile.write(sync_page.render(outcome))
 
     def log_message(self, *args) -> None:  # keep the code off the console
         return
@@ -190,7 +202,6 @@ def login(server: str, store: TokenStore, *, client_name: str,
         hashlib.sha256(verifier.encode("ascii")).digest()).decode("ascii").rstrip("=")
     state = secrets.token_urlsafe(24)
 
-    _Callback.result = {}
     listener = http.server.HTTPServer(("127.0.0.1", 0), _Callback)
     listener.timeout = 1
     redirect_uri = f"http://127.0.0.1:{listener.server_address[1]}/callback"
@@ -198,6 +209,25 @@ def login(server: str, store: TokenStore, *, client_name: str,
         "response_type": "code", "client_id": client_id, "redirect_uri": redirect_uri,
         "code_challenge": challenge, "code_challenge_method": "S256", "state": state,
         "scope": SCOPE, "resource": resource})
+
+    def complete(answer: dict) -> sync_page.Outcome:
+        """State check, code exchange and save — run while the browser waits for its page."""
+        if answer.get("state") != state:
+            return sync_page.failed("The answer did not match this sign-in request.")
+        if "code" not in answer:
+            reason = answer.get("error_description") or answer.get("error") or "no code was sent"
+            return sync_page.not_approved(f"The server answered: {reason}.")
+        status, tokens = _form(meta["token_endpoint"], {
+            "grant_type": "authorization_code", "code": answer["code"],
+            "redirect_uri": redirect_uri, "client_id": client_id,
+            "code_verifier": verifier, "resource": resource})
+        if status != 200 or "access_token" not in tokens:
+            return sync_page.failed(f"The server refused the sign-in code "
+                                    f"({status} {tokens.get('error', '')}).".replace(" )", ")"))
+        store.save(server, _token_record(meta, client_id, tokens, client_name))
+        return sync_page.signed_in(server, client_name)
+
+    _Callback.result, _Callback.complete = {}, complete
     # Flushed: under --no-browser, or run in the background, the address is the
     # only way in, and a buffered print would sit unseen while the listener waits.
     print("Sign in and approve at this address (waiting up to "
@@ -209,21 +239,12 @@ def login(server: str, store: TokenStore, *, client_name: str,
             listener.handle_request()
     finally:
         listener.server_close()
-    answer = _Callback.result
-    if not answer:
+        _Callback.complete = None
+    outcome = _Callback.result.get("outcome")
+    if outcome is None:
         raise SyncError("no answer from the browser in time; run login again")
-    if answer.get("state") != state:
-        raise SyncError("the sign-in answer did not match this request; nothing stored")
-    if "code" not in answer:
-        raise SyncError(f"sign-in not approved ({answer.get('error', 'no code')})")
-
-    status, tokens = _form(meta["token_endpoint"], {
-        "grant_type": "authorization_code", "code": answer["code"],
-        "redirect_uri": redirect_uri, "client_id": client_id,
-        "code_verifier": verifier, "resource": resource})
-    if status != 200 or "access_token" not in tokens:
-        raise SyncError(f"the server refused the sign-in code ({status} {tokens.get('error', '')})")
-    store.save(server, _token_record(meta, client_id, tokens, client_name))
+    if not outcome.ok:
+        raise SyncError(f"{outcome.heading}: {outcome.detail}")
     if replaced is not None:
         try:
             _revoke(replaced)

@@ -18,6 +18,7 @@ import urllib.parse
 import urllib.request
 
 import sync
+import sync_page
 import sync_state
 from sync_http import SyncError, check_server_url, client_name_for, host_label, login
 from test_sync import Env, finding, run_all, synced, with_env
@@ -210,6 +211,60 @@ def test_a_server_without_sync_stops_the_run_and_writes_nothing(env: Env) -> Non
     else:
         raise AssertionError("sync_unavailable must stop the run")
     assert not (env.root / ".sync" / "st.state.jsonl").exists()
+
+
+def browser_that_reads_the_page(env: Env, pages: list, answer: dict | None = None):
+    """A browser that answers the sign-in and keeps the page the listener sends back."""
+    def browser(url: str) -> None:
+        params = {k: v[0] for k, v in urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).items()}
+        reply = answer if answer is not None else {"code": env.server.issue_code(params)}
+        callback = params["redirect_uri"] + "?" + urllib.parse.urlencode(
+            {**reply, "state": params["state"]})
+        reader = threading.Thread(target=lambda: pages.append(
+            urllib.request.urlopen(callback, timeout=10).read().decode("utf-8")), daemon=True)
+        readers.append(reader)
+        reader.start()
+    readers: list[threading.Thread] = []
+    browser.wait = lambda: [reader.join(10) for reader in readers]   # type: ignore[attr-defined]
+    return browser
+
+
+@with_env
+def test_the_browser_is_told_signed_in_only_once_the_sign_in_is_stored(env: Env) -> None:
+    env.store.delete(env.server.url)
+    pages: list[str] = []
+    browser = browser_that_reads_the_page(env, pages)
+    with contextlib.redirect_stdout(io.StringIO()):
+        login(env.server.url, env.store, client_name=client_name_for("desk"),
+              open_browser=browser, timeout=10)
+    browser.wait()
+    assert env.store.load(env.server.url)["access_token"] == env.server.access
+    page = pages[0]
+    assert "You are signed in" in page and "bible-study-framework sync (desk)" in page
+    assert "<!doctype html>" in page and "prefers-color-scheme:dark" in page
+    assert env.server.access not in page and "code=" not in page
+
+
+@with_env
+def test_a_denied_sign_in_says_so_in_the_browser_and_in_the_terminal(env: Env) -> None:
+    env.store.delete(env.server.url)
+    pages: list[str] = []
+    browser = browser_that_reads_the_page(env, pages, {"error": "access_denied"})
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            login(env.server.url, env.store, client_name="t", timeout=10, open_browser=browser)
+        except SyncError as error:
+            assert "not approved" in str(error) and "access_denied" in str(error)
+        else:
+            raise AssertionError("a denied sign-in must fail")
+    browser.wait()
+    assert "Sign-in was not approved" in pages[0] and "You are signed in" not in pages[0]
+    assert not env.store.load(env.server.url).get("access_token")
+
+
+def test_the_page_escapes_what_it_is_given() -> None:
+    page = sync_page.render(sync_page.failed('<script>alert("x")</script>')).decode("utf-8")
+    assert "<script>alert" not in page and "&lt;script&gt;" in page
 
 
 def test_slugs_follow_the_protocol_rule() -> None:
