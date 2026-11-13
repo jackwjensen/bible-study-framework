@@ -33,6 +33,8 @@ class Feed:
     packs: dict[str, tuple[str, dict[str, str]]] = field(default_factory=dict)
     #: pack id -> base URL to list it under instead of this server's own
     pack_hosts: dict[str, str] = field(default_factory=dict)
+    #: pack id -> bytes served instead of the real zip (a broken pack)
+    raw_packs: dict[str, bytes] = field(default_factory=dict)
 
 
 class FeedServer:
@@ -92,6 +94,8 @@ class FeedServer:
 
 
 def _zip(feed: Feed, pack_id: str) -> bytes:
+    if pack_id in feed.raw_packs:
+        return feed.raw_packs[pack_id]
     version, findings = feed.packs[pack_id]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:

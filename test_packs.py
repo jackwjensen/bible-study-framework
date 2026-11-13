@@ -15,6 +15,7 @@ import shutil
 import sys
 import tempfile
 import urllib.request
+import zipfile
 from pathlib import Path
 
 import packs
@@ -302,6 +303,28 @@ def test_unsubscribe_removes_the_entry_and_the_key_and_keeps_the_findings(env: E
     assert env.keys.get(address) is None
     assert (env.root / "imported" / "ann" / "findings" / "gift-a.md").exists()
     assert env.run("unsubscribe", address)[0] == 1
+
+
+def _no_manifest_zip() -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr("findings/x.md", finding("x"))
+    return buffer.getvalue()
+
+
+@with_env
+def test_a_broken_pack_is_reported_and_the_feeds_after_it_are_still_pulled(env: Env) -> None:
+    for prefix, author_id, raw in (("/feeds/bad1", "bad1", b"this is not a zip"),
+                                   ("/feeds/bad2", "bad2", _no_manifest_zip())):
+        address = env.server.add(Feed(prefix, "Broken", author_id, packs={
+            f"{author_id}-all": ("1", {})}, raw_packs={f"{author_id}-all": raw}))
+        env.run("subscribe", address)
+    env.run("subscribe", env.public_feed())
+    code, out = env.run("pull", "--all", "-y")
+    assert code == 1, out
+    assert "bad1-all" in out and "bad2-all" in out
+    assert (env.root / "imported" / "bo" / "findings" / "b-one.md").exists()
+    assert "1 pack(s) updated" in out
 
 
 @with_env

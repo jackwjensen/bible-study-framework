@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import zipfile
 
 from packs_archive import die, import_download, installed_version
 from packs_feed import FeedError, feed_title, fetch, origin, parse_link, read_feed, redact
@@ -190,4 +191,13 @@ def pull_one(offer: Offer, *, assume_yes: bool) -> bool:
     except FeedError as error:
         print(f"- {pack_id}: {redact(str(error))}", file=sys.stderr)
         return False
-    return import_download(data, pack_id, assume_yes=assume_yes)
+    # One broken pack must not stop the run: import_zip() stops on a bad pack with
+    # die() (SystemExit, after printing why) and zipfile raises on a file that is
+    # not a zip at all. Either way this pack is a problem and the next one is tried.
+    try:
+        return import_download(data, pack_id, assume_yes=assume_yes)
+    except SystemExit:
+        print(f"- {pack_id}: not imported (see above)", file=sys.stderr)
+    except zipfile.BadZipFile:
+        print(f"- {pack_id}: the download is not a zip file; not imported", file=sys.stderr)
+    return False

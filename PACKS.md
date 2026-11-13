@@ -141,8 +141,9 @@ something you're standing on has moved. That is the real reason to bother with v
 finding you imported as `established` may since have been marked `retired` by its author, and you would
 otherwise never know.
 
-`pull` only updates packs you already have, unless you pass `--all`. A feed that cannot be read is
-reported and skipped; the others are still checked, and the command exits non-zero so a script notices.
+`pull` only updates packs you already have, unless you pass `--all`. A feed that cannot be read, or a
+pack that cannot be downloaded or is not a valid pack, is reported and skipped; the rest are still
+checked and pulled, and the command exits non-zero so a script notices.
 
 `unsubscribe` removes the feed from `subscriptions.json` and forgets its key. Findings you already
 imported from it stay in `imported/`; delete that folder yourself if you no longer want them.
