@@ -63,6 +63,15 @@ field or edge already covers it.
    ```bash
    python build_index.py --check
    ```
+   and, if you changed the tooling, its tests. Each is a plain script — no test runner needed — and
+   exits non-zero on a failure; CI runs all five on every push and pull request:
+   ```bash
+   python test_study_text.py
+   python test_study_sections.py
+   python test_packs.py
+   python test_sync.py
+   python test_sync_login.py
+   ```
 4. **Do not commit `INDEX.md`.** It is generated. If your change affects it, say so in the PR and let it
    regenerate.
 5. Match the surrounding style — the code is plain, dependency-free Python (standard library only),

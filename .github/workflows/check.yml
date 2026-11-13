@@ -40,6 +40,18 @@ jobs:
       - name: Source limits
         run: python scripts/check-source-limits.py --root . --format github
 
+      # Each test file runs as a plain script (standard library only, no runner) and
+      # exits non-zero on any failure; `set -e` stops at the first file that fails.
+      - name: Tooling tests
+        run: |
+          set -e
+          for test in test_study_text.py test_study_sections.py test_packs.py \
+                      test_sync.py test_sync_login.py; do
+            echo "::group::$test"
+            python "$test"
+            echo "::endgroup::"
+          done
+
       - name: Validate the corpus
         run: python build_index.py --check
 
