@@ -24,7 +24,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 @dataclass
 class Feed:
-    prefix: str                      # "/feeds/<code>" or the legacy "/packs/<name>"
+    prefix: str                      # "/feeds/<code>"
     author: str
     author_id: str
     key: str | None = None

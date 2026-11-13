@@ -148,8 +148,6 @@ checked and pulled, and the command exits non-zero so a script notices.
 `unsubscribe` removes the feed from `subscriptions.json` and forgets its key. Findings you already
 imported from it stay in `imported/`; delete that folder yourself if you no longer want them.
 
-Older addresses of the form `https://<site>/packs/<name>/feed.json` keep working, without a key.
-
 ### Private feeds
 
 A private feed is read only by people its publisher gave a **link**. The link is the feed's address

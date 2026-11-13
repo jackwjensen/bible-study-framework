@@ -77,9 +77,9 @@ class Env:
                                     title="Ann's notes", packs={"ann-gifts": ("2", {
                                         "gift-a": finding("gift-a")})}, **extra))
 
-    def public_feed(self, prefix: str = "/feeds/pub1", author_id: str = "bo") -> str:
-        return self.server.add(Feed(prefix, "Bo Writer", author_id, packs={
-            f"{author_id}-all": ("1", {"b-one": finding("b-one")})}))
+    def public_feed(self) -> str:
+        return self.server.add(Feed("/feeds/pub1", "Bo Writer", "bo", packs={
+            "bo-all": ("1", {"b-one": finding("b-one")})}))
 
 
 def with_env(test):
@@ -281,15 +281,6 @@ def test_a_private_feed_on_a_second_computer_asks_for_its_link_and_the_run_goes_
 def test_a_missing_keyless_feed_says_it_does_not_exist(env: Env) -> None:
     code, out = env.run("subscribe", env.server.url + "/feeds/nothing/feed.json")
     assert code == 1 and "no feed at" in out and "not valid JSON" not in out
-
-
-@with_env
-def test_a_legacy_packs_address_still_works_without_a_key(env: Env) -> None:
-    address = env.public_feed(prefix="/packs/old-name", author_id="old")
-    assert address.endswith("/packs/old-name/feed.json")
-    assert env.run("subscribe", address)[0] == 0
-    assert env.run("pull", "--all", "-y")[0] == 0
-    assert (env.root / "imported" / "old" / "findings" / "b-one.md").exists()
 
 
 @with_env
