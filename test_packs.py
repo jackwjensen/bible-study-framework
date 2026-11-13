@@ -14,12 +14,13 @@ import json
 import shutil
 import sys
 import tempfile
+import urllib.request
 from pathlib import Path
 
 import packs
 import packs_archive
 import packs_follow
-from packs_feed import FeedError, fetch, parse_link
+from packs_feed import FeedError, GuardedRedirects, fetch, parse_link
 from packs_testserver import Feed, FeedServer
 from user_secrets import FeedKeyStore
 
@@ -153,6 +154,27 @@ def test_a_link_is_refused_when_not_https_or_its_key_is_empty() -> None:
     assert parse_link("http://127.0.0.1:8081/feeds/a/feed.json").key is None
 
 
+def test_only_a_feed_on_this_computer_may_lead_to_this_computer() -> None:
+    remote = "https://feeds.example/feeds/a/feed.json"
+    for local in ("http://127.0.0.1:9/x.zip", "https://localhost/x.zip", "http://[::1]:9/x.zip",
+                  "https://127.0.0.2/x.zip"):
+        try:
+            fetch(local, feed=remote)                    # refused before any connection
+        except FeedError as error:
+            assert "this computer" in str(error), error
+            continue
+        raise AssertionError(local)
+    request = urllib.request.Request(remote)
+    request.feed_address = remote
+    try:
+        GuardedRedirects().redirect_request(request, None, 302, "Found", {},
+                                             "http://127.0.0.1:9/feed.json")
+    except FeedError as error:
+        assert "this computer" in str(error)
+    else:
+        raise AssertionError("a remote feed must not redirect to this computer")
+
+
 # ── feeds ────────────────────────────────────────────────────────────────────
 
 @with_env
@@ -211,7 +233,7 @@ def test_a_key_with_header_breaking_characters_is_refused_without_printing_it(en
         assert "key" in out
     assert env.server.requests == [] and env.subscriptions_text() == ""
     try:                                     # a bad key already stored reaches fetch() directly
-        fetch(address, key="SECRET\r\nX-Evil: 1", key_origin=address)
+        fetch(address, feed=address, key="SECRET\r\nX-Evil: 1")
     except FeedError as error:
         assert "SECRET" not in str(error)
     else:

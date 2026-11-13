@@ -186,7 +186,7 @@ def pull_one(offer: Offer, *, assume_yes: bool) -> bool:
     try:
         # The key goes only to the feed's own host; fetch() checks that again.
         same_host = origin(url) == origin(offer.address)
-        data = fetch(url, key=offer.key if same_host else None, key_origin=offer.address)
+        data = fetch(url, feed=offer.address, key=offer.key if same_host else None)
     except FeedError as error:
         print(f"- {pack_id}: {redact(str(error))}", file=sys.stderr)
         return False

@@ -30,6 +30,7 @@ Standard library only.
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 import urllib.error
@@ -96,14 +97,37 @@ def parse_link(link: str) -> FeedLink:
     return FeedLink(address, key)
 
 
-def check_address(url: str) -> None:
-    """Refuse anything but HTTPS, or plain HTTP to this computer."""
+def check_address(url: str, *, feed: str | None = None) -> None:
+    """Refuse anything but HTTPS, or plain HTTP to this computer.
+
+    `feed` is the feed address `url` was reached from (None when `url` is the
+    feed). This computer is reachable only from a feed that is itself on this
+    computer — a local test server. A feed elsewhere that names a pack or a
+    redirect here is pointing the reader's own machine at itself, which no
+    publisher has a reason to do.
+    """
     parts = urllib.parse.urlsplit(url)
+    local = is_loopback(parts.hostname or "")
+    if local and feed is not None and not is_loopback(urllib.parse.urlsplit(feed).hostname or ""):
+        raise FeedError(f"{redact(_without_query(feed))} points at this computer "
+                        f"({redact(_without_query(url))}); refusing")
     if parts.scheme == "https" and parts.hostname:
         return
-    if parts.scheme == "http" and (parts.hostname or "") in _LOOPBACK_HOSTS:
+    if parts.scheme == "http" and local:
         return
     raise FeedError(f"refusing a non-HTTPS address: {redact(url)}")
+
+
+def is_loopback(host: str) -> bool:
+    """Whether a host name or address means this computer."""
+    host = host.lower().strip("[]")
+    if host in _LOOPBACK_HOSTS or host.endswith(".localhost"):
+        return True
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return address.is_loopback or address.is_unspecified
 
 
 def origin(url: str) -> tuple[str, str, int | None]:
@@ -113,15 +137,23 @@ def origin(url: str) -> tuple[str, str, int | None]:
     return parts.scheme, (parts.hostname or "").lower(), port
 
 
-class _GuardedRedirects(urllib.request.HTTPRedirectHandler):
-    """Follow a redirect only where the request's rules still hold."""
+class GuardedRedirects(urllib.request.HTTPRedirectHandler):
+    """Follow a redirect only where the request's rules still hold.
+
+    fetch() tags each request with `feed_address`; it is carried to every hop,
+    so the loopback rule judges the last hop by the feed, not by the hop before.
+    """
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
-        check_address(newurl)
+        feed = getattr(req, "feed_address", None)
+        check_address(newurl, feed=feed if feed is not None else req.full_url)
         if req.has_header("Authorization") and origin(newurl) != origin(req.full_url):
             raise FeedError(f"{_without_query(req.full_url)} redirects to another host; "
                             "refusing to follow it with this feed's key")
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
+        follow = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if follow is not None:
+            follow.feed_address = feed
+        return follow
 
 
 def _without_query(url: str) -> str:
@@ -129,20 +161,26 @@ def _without_query(url: str) -> str:
     return urllib.parse.urlunsplit(parts._replace(query="", fragment=""))
 
 
-_OPENER = urllib.request.build_opener(_GuardedRedirects)
+_OPENER = urllib.request.build_opener(GuardedRedirects)
 
 
-def fetch(url: str, *, key: str | None = None, key_origin: str | None = None) -> bytes:
+def fetch(url: str, *, feed: str, key: str | None = None) -> bytes:
     """GET a feed or a pack.
 
-    `key` is sent only when `url` is on the same host as `key_origin` — the feed
-    address the key belongs to. A pack hosted elsewhere is fetched without it.
+    `feed` is the feed address `url` belongs to (the same string, for the feed
+    itself). `key` is sent only when `url` is on the feed's own host; a pack
+    hosted elsewhere is fetched without it.
     """
-    check_address(url)
+    check_address(feed)
+    check_address(url, feed=feed)
     headers = {"User-Agent": USER_AGENT}
-    if key is not None and key_origin is not None and origin(url) == origin(key_origin):
+    if key is not None and origin(url) == origin(feed):
         headers["Authorization"] = f"Bearer {key}"
-    request = urllib.request.Request(url, headers=headers)
+    try:
+        request = urllib.request.Request(url, headers=headers)
+        request.feed_address = feed
+    except ValueError:
+        raise FeedError(f"could not build a request for {redact(_without_query(url))}") from None
     try:
         with _OPENER.open(request, timeout=30) as response:
             data = response.read(MAX_DOWNLOAD_BYTES + 1)
@@ -167,7 +205,7 @@ def fetch(url: str, *, key: str | None = None, key_origin: str | None = None) ->
 def read_feed(address: str, key: str | None) -> dict:
     """The feed document at `address`, with the reader's key when it has one."""
     try:
-        raw = fetch(address, key=key, key_origin=address)
+        raw = fetch(address, feed=address, key=key)
     except FeedNotFound:
         if key is not None:
             raise FeedNotFound(f"the feed at {address} does not accept the key stored for it; "

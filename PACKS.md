@@ -239,7 +239,8 @@ A pack is a file from someone else, so `import` is careful with it:
 - **Path traversal is blocked** — absolute paths, drive letters, and `..` segments are rejected rather
   than sanitised, so a malicious archive cannot write outside `imported/`.
 - **Feeds and downloads must be HTTPS** (plain HTTP only to this computer, for testing a local
-  server), and downloads are size-capped. A redirect must stay on
+  server), and downloads are size-capped. Only a feed that is itself on this computer may lead to
+  this computer: a feed elsewhere whose pack or redirect points at `localhost` is refused. A redirect must stay on
   HTTPS too, and while a private feed's key is in play it must stay on the same host.
 - **Nothing is written until you confirm**, and you see the author, version, licence and finding count
   first.
