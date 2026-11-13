@@ -29,15 +29,13 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from study_corpus import load_content, normalize_list
+from study_corpus import FINDINGS_DIR, IMPORTED_DIR, MANIFEST_NAME, STUDY_DIR
+from study_frontmatter import load_content, normalize_list
 from study_text import romanize
 
-ROOT = Path(__file__).resolve().parent
-FINDINGS_DIR = ROOT / "findings"
-IMPORTED_DIR = ROOT / "imported"
+ROOT = STUDY_DIR
 SUBSCRIPTIONS_FILE = ROOT / "subscriptions.json"
 
-MANIFEST_NAME = "pack.md"
 USER_AGENT = "bible-study-framework-packs/1"
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024  # a findings pack is text; 25 MB is already absurd
 

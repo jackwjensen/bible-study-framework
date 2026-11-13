@@ -107,7 +107,8 @@ by rule, and never delete a `.remote` file without the user's say — that is wh
 
 ## Engineering standards (for anyone editing the tooling, not the corpus)
 
-The Python under `build_index.py` / `packs.py` / `study_corpus.py` / `study_sections.py` is
+The Python under `build_index.py` / `packs.py` / `study_corpus.py` / `study_frontmatter.py` /
+`study_sections.py` is
 checked by the shared standards pack. **This only concerns changes to the *code*** — writing
 findings and threads is unaffected.
 
@@ -123,7 +124,8 @@ python scripts/check-source-limits.py --root .
 - **There is no baseline file, and there must not be one.** Every file meets the limits
   outright, so the checker passes from a clean slate and any failure belongs to the change
   under test. When a file crosses 500 lines, name its second responsibility and split it —
-  that is exactly how `study_corpus.py` and `study_sections.py` came out of `build_index.py`.
+  that is exactly how `study_corpus.py` and `study_sections.py` came out of `build_index.py`,
+  and `study_frontmatter.py` out of `study_corpus.py`.
 - `.claude/rules/` carries the judgment half, auto-loaded by path. It is copied verbatim from
   the pack and covers stacks this repo does not use; that is deliberate — an edited copy would
   drift from its source, which is the failure the pack exists to prevent.
@@ -131,10 +133,11 @@ python scripts/check-source-limits.py --root .
   are red. Escape hatch: `SKIP_STANDARDS_GATE=1`, only when the failure is provably unrelated.
 - CI runs the same check before validating the corpus.
 
-**The tooling is mirrored, not shared** (see the note in `CONTRIBUTING.md`): these four modules
-also live in Jack's private corpus repo, and the only intended difference is the `origin` author
-slot — `own` here, the author's name there. A fix to one must be ported to the other, or the two
-definitions of "valid" drift apart. The optional sync modules (`sync.py`, `sync_http.py`,
+**The tooling is mirrored, not shared** (see the note in `CONTRIBUTING.md`): these modules and
+their tests (`test_study_text.py`, `test_study_sections.py`) also live in Jack's private corpus
+repo, and the only intended difference is the `origin` author slot — `own` here, the author's name
+there (in `study_corpus.py`'s `VALID_ORIGINS` and `study_sections.py`'s origin section). A fix to
+one must be ported to the other, or the two definitions of "valid" drift apart. The optional sync modules (`sync.py`, `sync_http.py`,
 `sync_plan.py`, `sync_state.py`, with `test_sync.py`, `test_sync_login.py` and
 `sync_testserver.py`) are copied
 **unchanged** wherever a corpus syncs; `sync_plan.py` finds the frontmatter parser in either layout.

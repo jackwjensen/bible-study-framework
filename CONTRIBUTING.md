@@ -13,7 +13,7 @@ study corpus. It ships deliberately empty of findings.
 
 **Welcome:**
 
-- Bug reports and fixes in the tooling — `study_corpus.py` (parsing + loading), `study_sections.py`
+- Bug reports and fixes in the tooling — `study_frontmatter.py` (parsing), `study_corpus.py` (loading), `study_sections.py`
   (rendering), `build_index.py` (validation + CLI), or `packs.py`
 - Improvements to the validator: better error messages, checks that catch real corpus rot
 - Documentation that is unclear, wrong, or missing a case
