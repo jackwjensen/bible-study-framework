@@ -182,7 +182,7 @@ def login(server: str, store: TokenStore, *, client_name: str,
     replaced: dict | None = None
     if client_id is None or registered_as != client_name:
         replaced = saved if client_id is not None else None
-        client_id = _register(meta, client_name)
+        client_id = _pending_registration(server, store, saved, meta, client_name)
     print(f"The server will list this computer as: {client_name}", flush=True)
     resource = server + API_PREFIX
     verifier = secrets.token_urlsafe(48)
@@ -240,6 +240,25 @@ def _token_record(meta: dict, client_id: str, tokens: dict, client_name: str | N
             "access_token": tokens["access_token"],
             "refresh_token": tokens.get("refresh_token"),
             "expires_at": time.time() + lifetime if lifetime else None}
+
+
+def _pending_registration(server: str, store: TokenStore, saved: dict, meta: dict,
+                          client_name: str) -> str:
+    """The client to sign in with under a name this computer is not yet signed in as.
+
+    Registering creates a client on the server at once, before the browser is even
+    opened, so a sign-in abandoned there would leave one behind — and every retry
+    another. The new client is therefore recorded as pending beside the current
+    sign-in (which keeps working) and reused by the next attempt under the same
+    name. A completed sign-in replaces the whole record, pending entry included.
+    """
+    pending = saved.get("pending_client") or {}
+    if pending.get("client_name") == client_name and pending.get("client_id"):
+        return str(pending["client_id"])
+    client_id = _register(meta, client_name)
+    store.save(server, {**saved, "pending_client": {"client_id": client_id,
+                                                    "client_name": client_name}})
+    return client_id
 
 
 def client_name_for(label: str) -> str:

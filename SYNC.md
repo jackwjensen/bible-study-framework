@@ -48,7 +48,9 @@ the sign-in address instead of opening a browser, and waits — for approving it
 The server lists each signed-in computer by name, `bible-study-framework sync (<host name>)`, and
 `login` prints that name before the browser opens. `python sync.py login --name "study laptop"` uses
 your own label instead of the host name. Signing in under a different name than before registers this
-computer afresh, and once the new sign-in is stored, revokes the one it replaces.
+computer afresh, and once the new sign-in is stored, revokes the one it replaces. Until then the old
+sign-in keeps working, and a sign-in you abandon in the browser is retried under the same
+registration rather than registering the computer again.
 
 ### What to commit
 

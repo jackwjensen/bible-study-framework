@@ -91,6 +91,28 @@ def test_a_new_name_registers_afresh_and_revokes_the_old_sign_in(env: Env) -> No
 
 
 @with_env
+def test_an_abandoned_sign_in_is_retried_without_registering_again(env: Env) -> None:
+    before = env.store.load(env.server.url)
+    with contextlib.redirect_stdout(io.StringIO()):
+        for _ in range(2):                                          # two sign-ins left unanswered
+            try:
+                login(env.server.url, env.store, client_name=client_name_for("new"),
+                      open_browser=lambda url: None, timeout=1)
+            except SyncError:
+                pass
+            else:
+                raise AssertionError("an unanswered sign-in must fail")
+        assert env.server.registered == [client_name_for("new")]   # registered once, not twice
+        assert env.store.load(env.server.url)["access_token"] == before["access_token"]  # old works
+        login(env.server.url, env.store, client_name=client_name_for("new"),
+              open_browser=approving_browser(env), timeout=10)
+    stored = env.store.load(env.server.url)
+    assert env.server.registered == [client_name_for("new")]
+    assert stored["client_id"] == "client-1" and stored["client_name"] == client_name_for("new")
+    assert "pending_client" not in stored
+
+
+@with_env
 def test_a_record_from_before_names_were_kept_is_reused_under_the_host_name(env: Env) -> None:
     assert "client_name" not in env.store.load(env.server.url)      # Env's record is old-style
     with contextlib.redirect_stdout(io.StringIO()):
