@@ -19,7 +19,7 @@ from pathlib import Path
 import packs
 import packs_archive
 import packs_follow
-from packs_feed import FeedError, parse_link
+from packs_feed import FeedError, fetch, parse_link
 from packs_testserver import Feed, FeedServer
 from user_secrets import FeedKeyStore
 
@@ -200,6 +200,22 @@ def test_a_key_is_never_printed_even_by_an_argument_error(env: Env) -> None:
     code, out = env.run("subscribe", address + "#key=" + KEY, "stray-argument")
     assert code != 0 and "stray-argument" in out
     assert KEY not in out
+
+
+@with_env
+def test_a_key_with_header_breaking_characters_is_refused_without_printing_it(env: Env) -> None:
+    address = env.private_feed()
+    for bad in ("SECRET%0D%0AX-Evil:%201", "SECRET%20two", "SECRET%00"):
+        code, out = env.run("subscribe", address + "#key=" + bad)
+        assert code == 1 and "SECRET" not in out, out
+        assert "key" in out
+    assert env.server.requests == [] and env.subscriptions_text() == ""
+    try:                                     # a bad key already stored reaches fetch() directly
+        fetch(address, key="SECRET\r\nX-Evil: 1", key_origin=address)
+    except FeedError as error:
+        assert "SECRET" not in str(error)
+    else:
+        raise AssertionError("a header-breaking key must be refused")
 
 
 @with_env

@@ -45,6 +45,9 @@ _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 _KEY_IN_TEXT = re.compile(r"(#key=)[^\s'\"&#]*", re.IGNORECASE)
 
+#: What a bearer key may be made of (RFC 6750's b64token): URL-safe, no space or line break.
+_KEY_CHARACTERS = re.compile(r"[A-Za-z0-9._~+/-]+=*")
+
 
 class FeedError(Exception):
     """A feed could not be read. The message is safe to print: it holds no key."""
@@ -85,6 +88,11 @@ def parse_link(link: str) -> FeedLink:
     key = urllib.parse.unquote(values[0]).strip()
     if key == "":
         raise FeedError(f"the link to {address} ends in '#key=' with no key; copy the whole link")
+    if not _KEY_CHARACTERS.fullmatch(key):
+        # The key goes into an HTTP header, where a line break or space would let
+        # it rewrite the request — and the error text would then quote it.
+        raise FeedError(f"the key in the link to {address} has characters a feed key cannot "
+                        "have; copy the link again exactly as you were given it")
     return FeedLink(address, key)
 
 
@@ -146,6 +154,10 @@ def fetch(url: str, *, key: str | None = None, key_origin: str | None = None) ->
         raise FeedError(f"could not reach {url}: {error.reason}") from None
     except OSError as error:
         raise FeedError(f"could not reach {url}: {error}") from None
+    except ValueError:
+        # http.client refuses a malformed header or URL with the offending value in
+        # the message — which may be the key. Name the address only.
+        raise FeedError(f"could not build a request for {redact(_without_query(url))}") from None
     if len(data) > MAX_DOWNLOAD_BYTES:
         raise FeedError(f"refusing oversized download (> {MAX_DOWNLOAD_BYTES // (1024 * 1024)} MB): "
                         f"{url}")
