@@ -97,6 +97,28 @@ Findings received from other people live in `imported/<author>/` and are **read-
 [`PACKS.md`](PACKS.md). Never edit them, never move them into `findings/`, and never re-stamp their
 origin. To use one, help the user write *their own* finding that `builds_on` or `tension_with` it.
 
+## Feeds, private links and sync — which is which
+
+Three purposes, three tools. **The table decides; never pick a tool by guessing.**
+
+| Purpose | Tool | Direction | Who can read |
+|---|---|---|---|
+| A public feed | `packs.py` | one way, read-only into `imported/` | anyone; findable in a public list |
+| A private feed | `packs.py` | one way, read-only into `imported/` | whoever the publisher gave a link |
+| Your own devices | `sync.py` | two-way, your own `findings/`, `themes/`, `threads/` | you, signed in |
+
+- **A user wanting their own work on another computer needs `sync.py`**, never a subscription to their
+  own feed — that would land a second copy of every finding in `imported/`. If `pull` warns that a
+  pack looks like their own work, explain this rather than carry on.
+- **A private feed's link ends in `#key=…`, and the key is a secret.** Pass the link the user gives
+  you straight to `python packs.py subscribe '<link>'` and nothing else. Never print it back, never
+  quote it in a summary, never write it into any file (not `subscriptions.json`, a note, a finding, a
+  script or a commit message), and never commit it. `packs.py` keeps the key in the user profile
+  and never prints it; keep it that way in what you say.
+- When `check` or `pull` says a feed *needs its link on this computer*, ask the user for the link —
+  do not look for the key anywhere else. When it says the stored key is not accepted, the link may
+  have been revoked: tell the user to ask the publisher for a new one.
+
 ## Sync conflicts
 
 If the corpus syncs with a server ([`SYNC.md`](SYNC.md)), `python sync.py run` may leave a

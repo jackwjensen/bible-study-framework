@@ -285,8 +285,20 @@ the framework is unchanged.
 
 Findings travel as **packs** — a zip anyone can send any way they like — and imported findings are
 quarantined in `imported/<author>/` so your own work stays distinguishable. You can also subscribe to
-someone's published pack feed and be told when they update. There is no central registry and nobody
+someone's feed and be told when they update. This framework keeps no central registry, and nobody
 approves anything. See [`PACKS.md`](PACKS.md).
+
+Three purposes, three different things — which tool is for what:
+
+| Purpose | Tool | Direction | Who can read |
+|---|---|---|---|
+| A public feed | `packs.py` | one way, read-only into `imported/` | anyone; findable in a public list |
+| A private feed | `packs.py` | one way, read-only into `imported/` | whoever the publisher gave a link |
+| Your own devices | `sync.py` | two-way, your own `findings/`, `themes/`, `threads/` | you, signed in |
+
+A reader never follows their **own** feed: the same findings would land in `imported/` beside the
+originals. Their own work moves by sync. A private feed's link carries a key; it is kept in your user
+profile, never in the corpus — see [`PACKS.md`](PACKS.md#private-feeds).
 
 ## The workflow
 

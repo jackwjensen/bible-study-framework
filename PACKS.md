@@ -178,6 +178,12 @@ same link there; it stores the key and changes nothing else.
 have revoked the link. Ask them for a new one and `subscribe` with it. (A private feed answers exactly
 like a feed that does not exist when the key is wrong — that is deliberate, so nobody can probe for it.)
 
+**What to commit.** `subscriptions.json` holds addresses and never a key, so it is safe to commit —
+and committing it is what lets your other computers follow the same feeds. The `.gitignore` this
+framework ships ignores it, together with `imported/`, so that a fresh corpus versions only your own
+work; delete the `subscriptions.json` line there if you want it to travel with the corpus. Never
+commit a link: a link with `#key=…` belongs in `subscribe`, not in a file.
+
 Anyone holding the link can read the feed, so treat it like a password: send it privately, never paste
 it into a file you commit, and never into a chat with an assistant you would not hand the key to.
 

@@ -31,6 +31,8 @@ Thumbs.db
 # Packs you receive are other people's work — keep them out of your history by
 # default. Delete this line if you would rather version what you have imported.
 imported/
+# The feeds you follow. It never holds a private feed's key (that stays in your user
+# profile), so delete this line to let your other computers follow the same feeds.
 subscriptions.json
 
 # sync.py's report of its last run. The rest of .sync/ (remotes, the sync base) IS
