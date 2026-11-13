@@ -21,6 +21,8 @@ import zipfile
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+from study_corpus import MANIFEST_NAME
+
 
 @dataclass
 class Feed:
@@ -99,7 +101,7 @@ def _zip(feed: Feed, pack_id: str) -> bytes:
     version, findings = feed.packs[pack_id]
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
-        archive.writestr("pack.md", (
+        archive.writestr(MANIFEST_NAME, (
             f"---\npack: {pack_id}\ntitle: \"{pack_id}\"\nauthor: \"{feed.author}\"\n"
             f"author_id: {feed.author_id}\nversion: {version}\n---\n\n# {pack_id}\n"))
         for finding_id, markdown in findings.items():
