@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import shutil
 import sys
 import tempfile
@@ -20,6 +21,7 @@ from pathlib import Path
 
 import sync
 import sync_state
+import user_secrets
 from sync_http import Client
 from sync_plan import same_claim
 from sync_state import TokenStore
@@ -323,6 +325,51 @@ def test_dry_run_changes_nothing(env: Env) -> None:
     assert not env.path("theirs").exists()
     assert env.server.text("finding/mine") is None
     assert not (env.root / ".sync" / "st.state.jsonl").exists()
+
+
+# ── a base file another program is holding ───────────────────────────────────
+
+@contextlib.contextmanager
+def _replace_refused(name: str, times: int):
+    """Make os.replace onto `name` raise PermissionError, as Windows does while a
+    virus scanner or the search indexer briefly holds a file it just saw change."""
+    original_replace, original_pause = os.replace, user_secrets.REPLACE_PAUSE_SECONDS
+    refusals = {"left": times}
+
+    def replace(source, target):
+        if Path(target).name == name and refusals["left"] > 0:
+            refusals["left"] -= 1
+            raise PermissionError(5, "Access is denied", str(target))
+        original_replace(source, target)
+
+    os.replace, user_secrets.REPLACE_PAUSE_SECONDS = replace, 0
+    try:
+        yield
+    finally:
+        os.replace, user_secrets.REPLACE_PAUSE_SECONDS = original_replace, original_pause
+
+
+@with_env
+def test_a_base_held_for_a_moment_is_written_on_a_later_attempt(env: Env) -> None:
+    env.write("a", finding("a"))
+    with _replace_refused("st.state.jsonl", times=2):
+        code, outcome, text = env.run()
+    assert code == 0 and outcome.counts == {"created": 1}, text
+    assert '"finding/a"' in "\n".join(_base_lines(env))
+    assert env.run()[1].counts == {}                        # the base really was saved
+
+
+@with_env
+def test_a_base_held_for_good_stops_the_run_and_leaves_no_temp_file(env: Env) -> None:
+    env.write("a", finding("a"))
+    with _replace_refused("st.state.jsonl", times=10_000):
+        try:
+            env.run()
+        except PermissionError:
+            pass
+        else:
+            raise AssertionError("a file that stays locked must stop the run")
+    assert not list((env.root / ".sync").glob(".st.state.jsonl.*"))
 
 
 # ── a base two computers wrote ───────────────────────────────────────────────

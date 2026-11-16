@@ -128,6 +128,8 @@ is the reader's judgment, like any other change to a finding. Show both, propose
 
 An interrupted run is safe to repeat. Every file is written atomically and the base is saved after
 each item; an item that moved but was not yet recorded is found identical on both sides next time.
+A refused final rename is retried for about two seconds, because on Windows a virus scanner or the
+search indexer briefly holds a file right after it changes; a file still locked after that stops the run.
 
 ## The protocol
 

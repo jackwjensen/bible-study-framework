@@ -38,10 +38,20 @@ import json
 import os
 import sys
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 
 APP_FOLDER = "bible-study-framework"
+
+#: How often, and how far apart, atomic_write tries the final rename before it
+#: gives up. Windows refuses to replace a file another program has open, and a
+#: virus scanner or the search indexer opens a file for a moment right after it
+#: changes: on 2026-11-16 every write of the sync base was refused once and
+#: succeeded on the next try 0.25 s later. Ten tries over about two seconds
+#: rides that out; a file that stays locked longer is a real problem, reported.
+REPLACE_ATTEMPTS = 10
+REPLACE_PAUSE_SECONDS = 0.2
 
 
 def user_dir(part: str) -> Path:
@@ -105,16 +115,31 @@ def atomic_write(path: Path, data: bytes) -> None:
     An interrupted run must leave either the old file or the new one, never half
     of either: a truncated state file would lose the base for every item, and a
     truncated finding would be pushed as an edit.
+
+    The rename is tried up to REPLACE_ATTEMPTS times, because Windows refuses it
+    while another program briefly holds the target (see REPLACE_ATTEMPTS).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     handle, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
     try:
         with os.fdopen(handle, "wb") as out:
             out.write(data)
-        os.replace(temp_name, path)
+        _replace_patiently(temp_name, path)
     except BaseException:
         Path(temp_name).unlink(missing_ok=True)
         raise
+
+
+def _replace_patiently(source: str, target: Path) -> None:
+    """os.replace, retried while the target is held open by another program."""
+    for attempt in range(1, REPLACE_ATTEMPTS + 1):
+        try:
+            os.replace(source, target)
+            return
+        except PermissionError:
+            if attempt == REPLACE_ATTEMPTS:
+                raise
+            time.sleep(REPLACE_PAUSE_SECONDS)
 
 
 def write_private(path: Path, data: bytes) -> None:
