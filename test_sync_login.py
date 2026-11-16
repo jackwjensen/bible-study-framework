@@ -12,15 +12,20 @@ from __future__ import annotations
 
 import contextlib
 import io
+import os
 import sys
 import threading
+import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
 import sync
 import sync_page
 import sync_state
-from sync_http import SyncError, check_server_url, client_name_for, host_label, login
+import user_secrets
+from sync_http import (Client, NeedLogin, SyncError, check_server_url, client_name_for,
+                       host_label, login)
 from test_sync import Env, finding, run_all, synced, with_env
 
 
@@ -260,6 +265,99 @@ def test_a_denied_sign_in_says_so_in_the_browser_and_in_the_terminal(env: Env) -
     browser.wait()
     assert "Sign-in was not approved" in pages[0] and "You are signed in" not in pages[0]
     assert not env.store.load(env.server.url).get("access_token")
+
+
+@contextlib.contextmanager
+def environment(**values: str | None):
+    """Set (or, with None, remove) environment variables for the block, then restore them."""
+    before = {name: os.environ.get(name) for name in values}
+    try:
+        for name, value in values.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+        yield
+    finally:
+        for name, value in before.items():
+            if value is None:
+                os.environ.pop(name, None)
+            else:
+                os.environ[name] = value
+
+
+def test_secrets_are_kept_where_an_app_cannot_redirect_them() -> None:
+    # An MSIX app (the Claude desktop app, a Store app) redirects %APPDATA% and
+    # %LOCALAPPDATA% for every program it starts; the profile root it leaves alone.
+    with environment(XDG_CONFIG_HOME=None):
+        folder = user_secrets.user_dir("sync")
+    assert folder == Path.home() / ".config" / "bible-study-framework" / "sync"
+    for redirected in ("APPDATA", "LOCALAPPDATA"):
+        if os.environ.get(redirected):
+            assert not folder.is_relative_to(os.environ[redirected])
+
+
+@with_env
+def test_a_finished_sign_in_is_adopted_once_from_the_old_location(env: Env) -> None:
+    record = env.store.load(env.server.url)
+    old = sync_state.TokenStore(env.temp / "old")
+    old.save(env.server.url, record)
+    store = sync_state.TokenStore(env.temp / "new", legacy_directory=env.temp / "old")
+    assert store.load(env.server.url)["access_token"] == record["access_token"]
+    assert not list((env.temp / "old").glob("*.json"))             # moved, not copied
+    assert sync_state.TokenStore(env.temp / "new").load(env.server.url) == store.load(env.server.url)
+
+
+@with_env
+def test_an_unfinished_old_sign_in_is_not_adopted_and_the_refusal_says_what_happened(
+        env: Env) -> None:
+    roaming, local = env.temp / "Roaming", env.temp / "Local"
+    old_dir = roaming / "bible-study-framework" / "sync"
+    started = time.mktime((2026, 11, 13, 15, 5, 0, 0, 0, -1))
+    sync_state.TokenStore(old_dir).save(env.server.url, {"pending_client": {
+        "client_id": "c-9", "client_name": "bible-study-framework sync (desk)",
+        "started_at": started}})
+    # The redirected copy an app keeps of that file — what its programs read instead.
+    shadow = (local / "Packages" / "Some.App_abc123" / "LocalCache" / "Roaming"
+              / "bible-study-framework" / "sync")
+    shadow.mkdir(parents=True)
+    for path in old_dir.glob("*.json"):
+        (shadow / path.name).write_bytes(path.read_bytes())
+    store = sync_state.TokenStore(env.temp / "new", legacy_directory=old_dir)
+    with environment(APPDATA=str(roaming), LOCALAPPDATA=str(local)):
+        try:
+            Client(env.server.url, "bible", store)
+        except NeedLogin as error:
+            message = str(error)
+        else:
+            raise AssertionError("a sign-in that never finished must not count as one")
+    assert not (env.temp / "new").exists()                         # nothing adopted
+    assert '"bible-study-framework sync (desk)"' in message and "13 Nov 2026 15:05" in message
+    assert "never stored here" in message and "Nothing is wrong on the server" in message
+    assert "Some.App_abc123" in message and "sync.py run --dry-run" in message
+    assert str(env.temp / "new") in message and message.endswith("python sync.py login")
+
+
+@with_env
+def test_never_signed_in_still_says_so_plainly(env: Env) -> None:
+    store = sync_state.TokenStore(env.temp / "new", legacy_directory=env.temp / "none")
+    assert store.why_not_signed_in(env.server.url) == (
+        "not signed in to this server; run: python sync.py login")
+
+
+@with_env
+def test_an_abandoned_sign_in_records_when_it_started(env: Env) -> None:
+    env.store.delete(env.server.url)
+    before = time.time()
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            login(env.server.url, env.store, client_name="t", open_browser=lambda url: None,
+                  timeout=1)
+        except SyncError:
+            pass
+    started = env.store.load(env.server.url)["pending_client"]["started_at"]
+    assert before <= started <= time.time()
+    assert "A sign-in as \"t\" was started" in env.store.why_not_signed_in(env.server.url)
 
 
 def test_the_page_escapes_what_it_is_given() -> None:

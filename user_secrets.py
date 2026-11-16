@@ -5,12 +5,21 @@ user_secrets.py — secrets kept in the user profile, never in the corpus.
 Two tools hold a secret that must not travel with the corpus: `sync.py` keeps
 its sign-in tokens, and `packs.py` keeps the key of each private feed the reader
 follows. A corpus is meant to be shared, pushed and zipped, so neither may be
-written inside it. Both live under one per-user folder instead:
+written inside it. Both live under one per-user folder instead,
+`$XDG_CONFIG_HOME/bible-study-framework/<part>/` (default `~/.config/…`, on
+Windows `%USERPROFILE%\\.config\\…`): on Windows each secret is additionally
+encrypted for the signed-in Windows user (DPAPI); elsewhere the files are
+readable by their owner only.
 
-- Windows: `%APPDATA%\\bible-study-framework\\<part>\\`, each secret additionally
-  encrypted for the signed-in Windows user (DPAPI);
-- elsewhere: `$XDG_CONFIG_HOME/bible-study-framework/<part>/` (default
-  `~/.config/…`), in files readable by their owner only.
+**Why not `%APPDATA%` on Windows** — where these files lived until 2026-11-16.
+An app installed as an MSIX package (from the Microsoft Store, or the Claude
+desktop app) gets a *merged* view of `%APPDATA%` that every process it starts
+inherits: what such a process writes there goes to the package's own
+`%LOCALAPPDATA%\\Packages\\<package>\\LocalCache\\Roaming\\`, and a copy there
+then hides the real file from it. A sign-in begun from one program and
+finished from another was stored where the first could never see it again.
+`%LOCALAPPDATA%` is redirected the same way; the profile root is not. Old
+files are adopted from `%APPDATA%` once (`adopt_legacy`).
 
 This module is the storage primitive both of them use, so there is one way to
 seal a secret, not two. It knows nothing about sync or feeds beyond the small
@@ -24,22 +33,70 @@ Standard library only.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 APP_FOLDER = "bible-study-framework"
 
 
 def user_dir(part: str) -> Path:
-    """The per-user folder for one tool's secrets (`sync`, `feeds`)."""
-    if sys.platform == "win32":
-        base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-    else:
-        base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    """The per-user folder for one tool's secrets (`sync`, `feeds`), on every platform."""
+    base = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
     return base / APP_FOLDER / part
+
+
+def legacy_user_dir(part: str) -> Path | None:
+    """Where Windows kept these secrets before 2026-11-16 — `%APPDATA%`; None elsewhere."""
+    if sys.platform != "win32":
+        return None
+    base = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+    return base / APP_FOLDER / part
+
+
+def adopt_legacy(path: Path, legacy_dir: Path | None,
+                 usable: Callable[[Path], bool] = lambda _: True) -> None:
+    """Move a secret from the old location to `path`, once, if `path` has none yet.
+
+    `usable` lets a caller decline an old file that holds nothing worth keeping —
+    a sign-in that was started but never finished — so that a stale copy seen
+    through an app's redirected view cannot take the place of a good one that a
+    plain terminal would still adopt. The old file is removed once copied, so the
+    two can never drift apart; a removal that fails leaves a harmless orphan.
+    """
+    if legacy_dir is None or path.exists():
+        return
+    old = legacy_dir / path.name
+    if not old.is_file() or not usable(old):
+        return
+    write_private(path, old.read_bytes())
+    with contextlib.suppress(OSError):
+        old.unlink()
+
+
+def app_copies(legacy_file: Path) -> list[str]:
+    """The MSIX packages holding their own redirected copy of a file under `%APPDATA%`.
+
+    A program started by one of those apps reads that copy instead of the file
+    itself (see the module docstring). Named, so a message can say why a file
+    this program sees differs from the one a plain terminal sees.
+    """
+    roaming, local = os.environ.get("APPDATA"), os.environ.get("LOCALAPPDATA")
+    if not roaming or not local:
+        return []
+    try:
+        relative = legacy_file.relative_to(roaming)
+    except ValueError:
+        return []
+    packages = Path(local) / "Packages"
+    if not packages.is_dir():
+        return []
+    return sorted(package.name for package in packages.iterdir()
+                  if (package / "LocalCache" / "Roaming" / relative).is_file())
 
 
 def atomic_write(path: Path, data: bytes) -> None:
@@ -128,11 +185,13 @@ class FeedKeyStore:
 
     REMEDY = "subscribe to the feed's link again: python packs.py subscribe <link>"
 
-    def __init__(self, directory: Path | None = None):
+    def __init__(self, directory: Path | None = None, legacy_directory: Path | None = None):
         self.directory = directory or user_dir("feeds")
+        self.legacy_directory = legacy_directory if directory else legacy_user_dir("feeds")
         self.path = self.directory / "keys.json"
 
     def _read(self) -> dict[str, str]:
+        adopt_legacy(self.path, self.legacy_directory)
         if not self.path.exists():
             return {}
         return dict(json.loads(self.path.read_text(encoding="utf-8")).get("keys", {}))

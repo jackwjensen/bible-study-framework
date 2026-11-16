@@ -41,9 +41,11 @@ server's own sign-in page; you approve there, and the browser hands a one-time c
 script on `127.0.0.1`. Your password never passes through the script. The browser tab then says
 whether the sign-in completed, was not approved, or failed and why — it is answered only after the
 code has been exchanged and stored, so "signed in" there is true. The sign-in is stored in **your
-user profile**, never in the corpus (`%APPDATA%\bible-study-framework\sync\` on Windows, encrypted
-for your Windows user; `~/.config/bible-study-framework/sync/` elsewhere, readable by you only). So a
-corpus can be pushed, zipped or shared without carrying it, and each computer signs in once.
+user profile**, never in the corpus: `~/.config/bible-study-framework/sync/` (on Windows
+`%USERPROFILE%\.config\bible-study-framework\sync\`, encrypted for your Windows user; elsewhere
+readable by you only). So a corpus can be pushed, zipped or shared without carrying it, and each
+computer signs in once — whichever program you sign in from, every other program on that computer
+finds the sign-in.
 `python sync.py logout` revokes this computer's sign-in. `python sync.py login --no-browser` prints
 the sign-in address instead of opening a browser, and waits — for approving it in a browser elsewhere.
 
@@ -53,6 +55,28 @@ your own label instead of the host name. Signing in under a different name than 
 computer afresh, and once the new sign-in is stored, revokes the one it replaces. Until then the old
 sign-in keeps working, and a sign-in you abandon in the browser is retried under the same
 registration rather than registering the computer again.
+
+### Why the sign-in is not kept in `%APPDATA%` on Windows
+
+Until 2026-11-16 it was, and on one computer a finished sign-in then looked lost: the server listed
+the computer as signed in, a sync had run, and yet the next run said "not signed in". The cause,
+reproduced: an app installed as an MSIX package — one from the Microsoft Store, or the Claude desktop
+app — gives every program it starts a *merged* view of `%APPDATA%`. What such a program writes there
+goes into the app's own `%LOCALAPPDATA%\Packages\<app>\LocalCache\Roaming\`, and once a copy exists
+there, it hides the real file from that program. A sign-in started from a program the app launched
+(it wrote its half-finished registration into the app's copy and timed out) and then finished from a
+plain terminal (which wrote the real file) left two different files at one path: the terminal saw the
+sign-in, the app's programs saw only the unfinished start. `%LOCALAPPDATA%` is redirected the same
+way; the profile root is not, so the sign-in now lives there and every program sees one file.
+
+A sign-in from the old location is moved to the new one the first time any sync command runs — but
+only a finished one. If a program started by such an app runs first, it may see only the app's stale
+copy; it leaves that alone and says so, naming the app, so that the real sign-in is not hidden a second
+time. Running `python sync.py run --dry-run` once from a plain terminal moves it; signing in again
+anywhere also works.
+
+When no finished sign-in is stored but one was started, the refusal says so — which name, when it
+was started, that the server is not at fault — instead of a bare "not signed in".
 
 ### What to commit
 

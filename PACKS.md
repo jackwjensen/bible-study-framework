@@ -162,8 +162,10 @@ Paste the whole link, in quotes. What happens to it:
 - **`subscriptions.json` records the address only** — without `#key=…`, exactly as for a public feed,
   plus `"private": true`. That file is safe to commit and share; it never holds a key.
 - **The key is kept in your user profile on this computer**, beside the sync sign-in:
-  `%APPDATA%\bible-study-framework\feeds\` on Windows, encrypted for your Windows user;
-  `~/.config/bible-study-framework/feeds/` elsewhere, readable by you only.
+  `~/.config/bible-study-framework/feeds/` (`%USERPROFILE%\.config\…` on Windows, encrypted for
+  your Windows user; elsewhere readable by you only). A key kept in `%APPDATA%` by an older version
+  is moved there on first use; [SYNC.md](SYNC.md#why-the-sign-in-is-not-kept-in-appdata-on-windows)
+  says why it moved.
 - **The key is sent only to the feed's own host**, as an `Authorization` header — the part after `#`
   in a link is never sent to any server. A pack hosted somewhere else is fetched without it, and a
   redirect to another host is refused rather than followed with the key.

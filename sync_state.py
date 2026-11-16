@@ -23,10 +23,12 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import time
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from user_secrets import atomic_write, seal, unseal, user_dir, write_private
+from user_secrets import (adopt_legacy, app_copies, atomic_write, legacy_user_dir, seal, unseal,
+                          user_dir, write_private)
 
 #: Item kinds the protocol knows, and the corpus folder each lives in.
 KIND_DIRS = {"finding": "findings", "theme": "themes", "thread": "threads"}
@@ -231,10 +233,17 @@ def default_token_dir() -> Path:
 
 
 class TokenStore:
-    """One file per server, holding the client registration and the tokens."""
+    """One file per server, holding the client registration and the tokens.
 
-    def __init__(self, directory: Path | None = None):
+    A record from the old Windows location (user_secrets.py says why it moved) is
+    adopted only if it holds a finished sign-in: a program started by an MSIX app
+    may be looking at that app's stale copy, and adopting *that* would hide the
+    good record a plain terminal still sees there.
+    """
+
+    def __init__(self, directory: Path | None = None, legacy_directory: Path | None = None):
         self.directory = directory or default_token_dir()
+        self.legacy_directory = legacy_directory if directory else legacy_user_dir("sync")
 
     def _path(self, server_url: str) -> Path:
         parts = urlsplit(server_url)
@@ -243,11 +252,55 @@ class TokenStore:
 
     def load(self, server_url: str) -> dict:
         path = self._path(server_url)
+        adopt_legacy(path, self.legacy_directory, usable=_signed_in)
         if not path.exists():
             return {}
         stored = json.loads(path.read_text(encoding="utf-8"))
         return {key: unseal(value, remedy=_REMEDY) if key in _SECRET_KEYS else value
                 for key, value in stored.items()}
+
+    def why_not_signed_in(self, server_url: str) -> str:
+        """What NeedLogin says when no finished sign-in is stored for this server.
+
+        A plain "not signed in" is wrong when a sign-in was begun: the person
+        approved something in a browser and deserves to know where it went. So it
+        says what was started and when, what happened to it, and what helps.
+        """
+        plain = "not signed in to this server; run: python sync.py login"
+        found = self._unfinished(server_url)
+        if found is None:
+            return plain
+        path, name, started = found
+        when = time.strftime("%d %b %Y %H:%M", time.localtime(started))
+        message = (f"not signed in to this server. A sign-in as \"{name}\" was started on this "
+                   f"computer on {when}, but it was never stored here: it was not approved in "
+                   "the browser in time, or it was approved in a program whose files this one "
+                   "cannot see. Nothing is wrong on the server.")
+        if self.legacy_directory is not None and path.parent == self.legacy_directory:
+            apps = app_copies(path)
+            if apps:
+                message += (f" Windows keeps a separate copy of the old sign-in file for "
+                            f"{', '.join(apps)} (an app installed as a package), and programs "
+                            "it starts see that copy. If the sign-in was finished in a plain "
+                            "terminal, run python sync.py run --dry-run there once: it moves "
+                            f"the sign-in to {self.directory}, where every program finds it.")
+        return message + " Otherwise sign in again: python sync.py login"
+
+    def _unfinished(self, server_url: str) -> tuple[Path, str, float] | None:
+        """The sign-in begun but not finished here: its file, name and start time."""
+        for directory in (self.directory, self.legacy_directory):
+            if directory is None:
+                continue
+            path = directory / self._path(server_url).name
+            if not path.is_file():
+                continue
+            record = json.loads(path.read_text(encoding="utf-8"))
+            pending = record.get("pending_client")
+            if record.get("access_token") or not isinstance(pending, dict):
+                continue
+            started = pending.get("started_at") or path.stat().st_mtime
+            return path, str(pending.get("client_name") or "this computer"), float(started)
+        return None
 
     def save(self, server_url: str, data: dict) -> None:
         sealed = {key: seal(value, remedy=_REMEDY) if key in _SECRET_KEYS and value else value
@@ -260,3 +313,11 @@ class TokenStore:
 
 _SECRET_KEYS = {"access_token", "refresh_token"}
 _REMEDY = "run: python sync.py login"
+
+
+def _signed_in(path: Path) -> bool:
+    """Whether a stored record holds a finished sign-in (key names only, no values read)."""
+    try:
+        return bool(json.loads(path.read_text(encoding="utf-8")).get("access_token"))
+    except (OSError, ValueError):
+        return False

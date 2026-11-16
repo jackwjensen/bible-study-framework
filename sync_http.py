@@ -278,7 +278,8 @@ def _pending_registration(server: str, store: TokenStore, saved: dict, meta: dic
         return str(pending["client_id"])
     client_id = _register(meta, client_name)
     store.save(server, {**saved, "pending_client": {"client_id": client_id,
-                                                    "client_name": client_name}})
+                                                    "client_name": client_name,
+                                                    "started_at": time.time()}})
     return client_id
 
 
@@ -312,7 +313,7 @@ class Client:
         self.sleep = sleep
         self.tokens = store.load(server)
         if not self.tokens.get("access_token"):
-            raise NeedLogin("not signed in to this server; run: python sync.py login")
+            raise NeedLogin(store.why_not_signed_in(server))
 
     def _refresh(self) -> None:
         refresh = self.tokens.get("refresh_token")
