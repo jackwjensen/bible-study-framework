@@ -134,26 +134,35 @@ The Python under `build_index.py` / `packs*.py` / `study_corpus.py` / `study_fro
 checked by the shared standards pack. **This only concerns changes to the *code*** — writing
 findings and threads is unaffected.
 
+The verification is `python engineering_standards/verify.py` — one definition, three callers.
+**Do not run it by hand; the git hooks run it.** Wire them once per clone (a fresh clone has no
+gate until you do):
+
 ```bash
-python scripts/check-source-limits.py --root .
+git config core.hooksPath engineering_standards/hooks
 ```
 
-- `scripts/` holds one tool split four ways — `check-source-limits.py` (driver),
-  `standards_checks.py` (per-language patterns), `standards_sentinels.py` (`unset-not-zero`,
-  `payload-default`) and `standards_core.py` (shared vocabulary), plus `precommit-gate.py`.
-  They import each other from the same directory, so **copy all four or none**; a partial copy
-  fails as an `ImportError` at commit time.
+- `pre-commit` checks the staged files; `pre-push` runs the fast stage (the scan of what the
+  branch changed since `origin/main`); CI runs the full stage (`verify.py --ci --strict`: the
+  whole-tree scan, the pay-down check and the dependency gate). A red CI on a branch whose
+  code you did not touch is most often a new release of a pinned tool — see `/update-deps`.
+- `engineering_standards/` is owned by the pack and replaced whole by `/apply-standards`;
+  never edit a file in it here. It is one importing package, so a partial copy fails as an
+  `ImportError` at commit time.
 - **There is no baseline file, and there must not be one.** Every file meets the limits
   outright, so the checker passes from a clean slate and any failure belongs to the change
   under test. When a file crosses 500 lines, name its second responsibility and split it —
   that is exactly how `study_corpus.py` and `study_sections.py` came out of `build_index.py`,
-  and `study_frontmatter.py` out of `study_corpus.py`.
-- `.claude/rules/` carries the judgment half, auto-loaded by path. It is copied verbatim from
+  and `study_frontmatter.py` out of `study_corpus.py`.- `.claude/rules/` carries the judgment half, auto-loaded by path. It is copied verbatim from
   the pack and covers stacks this repo does not use; that is deliberate — an edited copy would
   drift from its source, which is the failure the pack exists to prevent.
-- `.claude/settings.json` installs a `PreToolUse` hook that blocks `git commit` while the gates
-  are red. Escape hatch: `SKIP_STANDARDS_GATE=1`, only when the failure is provably unrelated.
-- CI runs the same check before validating the corpus.
+- **Work on a branch, never directly on `main`.** Every branch push runs the full check in
+  GitHub Actions (`.github/workflows/check.yml`); merge into `main` only when the branch's
+  run is green. There is no pull-request trigger, so a fork's contribution is checked once
+  it is pushed to a branch here. Nothing deploys from this repository,
+  so the check is the whole of CI. After a push, read the job's conclusion in Actions rather
+  than `gh run watch --exit-status`, which exits 1 when any job is skipped.
+- CI runs the same standards check before the tooling tests and the corpus validation.
 
 **The tooling is mirrored, not shared** (see the note in `CONTRIBUTING.md`): these modules and
 their tests (`test_study_text.py`, `test_study_sections.py`, `test_packs.py` with

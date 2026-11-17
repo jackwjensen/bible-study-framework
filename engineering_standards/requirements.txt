@@ -1,0 +1,18 @@
+# What the pack's own tooling needs beyond the standard library, declared HERE so that every
+# repo carrying engineering_standards/ also carries its prerequisites. The scanner and
+# verify.py are stdlib-only; the self-tests need pytest, and the gate and three of its tests
+# run a real ruff.
+#
+#     python -m pip install -r engineering_standards/requirements.txt
+#
+# Until 2026-10-02 these versions were typed into each CI workflow instead -- four copies of
+# one pin, and a consumer whose workflow predated the ruff line held three tests red and its
+# deploy blocked for four days, while the pack's own CI stayed green because it installed
+# ruff inline. A repo is self-contained: see .claude/rules/self-contained-repo.md.
+
+# PINNED EXACTLY (Jack, 2026-10-02): every machine and every CI run gets identical tools, and
+# moving to a newer release is a deliberate, investigated change rather than whatever resolved
+# that day. A pin must not go stale silently, so each new release has to be looked at; see
+# claude/rules/self-contained-repo.md.
+pytest==9.2.0
+ruff==0.16.10

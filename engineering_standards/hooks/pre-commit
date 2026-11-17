@@ -1,0 +1,12 @@
+#!/bin/sh
+# Fast checks, scoped to what is staged. Runs for every client that commits -- terminal,
+# IDE button, GUI client, and any coding agent -- because it is git's hook, not one tool's.
+#
+# Deliberately does NOT build or run tests: see standards_gates.py for why those belong at
+# push, and why a slow commit gate is a bypassed commit gate.
+#
+# Escape hatch:  SKIP_STANDARDS_GATE=1 git commit ...   (or git commit --no-verify)
+#
+# Source of truth: engineering-standards/engineering_standards/hooks/pre-commit
+
+exec "$(dirname "$0")/_verify.sh" --staged

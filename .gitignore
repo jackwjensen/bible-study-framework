@@ -8,8 +8,13 @@
 __pycache__/
 *.pyc
 
-# Claude Code. The commit gate and the standards rules ARE versioned; only the
-# machine-specific bits (permissions, worktrees) stay local. The global gitignore
+# Environment files hold credentials; never version any copy of one.
+.env*
+!.env.example
+
+# Claude Code. The standards rules ARE versioned; only the machine-specific bits
+# (permissions, worktrees) stay local. The commit gate is a git hook now, in
+# engineering_standards/hooks/, not a Claude Code setting. The global gitignore
 # excludes .claude/ wholesale, and git cannot re-include a file whose parent directory
 # is excluded, so the directory has to be un-excluded first — and the un-exclude must
 # come before the `.claude/*` line, because the LAST matching rule wins.

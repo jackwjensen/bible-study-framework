@@ -1,0 +1,23 @@
+# Line endings for files that run under a Unix shell. A CR is a syntax error to sh and bash
+# -- in a container, in CI, in a git hook -- not a cosmetic difference. Whether a checkout
+# gets CRLF is otherwise decided by core.autocrlf, which differs per PC and travels with no
+# clone; this file travels with the repository and outranks it.
+#
+# Seeded once by /apply-standards (engineering_standards/templates/.gitattributes); this
+# repository owns it from then on. The `gitattributes-eol` scanner rule checks that the LF
+# lines below keep resolving, so edit freely around them.
+#
+# Deliberately no `* text=auto`: on adoption it would renormalise the whole index in one
+# commit. Whether to take that is this repository's own decision.
+
+*.sh                             text eol=lf
+Dockerfile                       text eol=lf
+Dockerfile.*                     text eol=lf
+*.Dockerfile                     text eol=lf
+
+# Git hooks are shell scripts without an extension -- same hazard, no *.sh to catch them.
+engineering_standards/hooks/*    text eol=lf
+
+# cmd.exe finds `goto` / `call :label` targets reliably only in CRLF files.
+*.bat                            text eol=crlf
+*.cmd                            text eol=crlf

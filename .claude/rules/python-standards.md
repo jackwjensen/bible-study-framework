@@ -10,11 +10,42 @@ Ruff enforces the mechanical half: complexity (`C901`), too many branches/args/s
 (`PLR0912`/`PLR0913`/`PLR0915`), logging format (`G`), line length, and import hygiene.
 File length and money-as-float come from `check-source-limits.py`. Don't re-check those by eye.
 
+## The interpreter floor is enforced, and every declaration moves together
+
+**`python-support` in `check-source-limits.py` enforces `PYTHON_FLOOR`** — the number and the
+support dates behind it live in `engineering_standards/standards_versions.py` and
+`engineering_standards/standards_python_support.py`, never here, so there is one place to change it.
+
+The judgment part is what to do when it fires. It reads five sites — `.python-version`,
+`python-version:` in CI, `FROM …python:`, `requires-python`, and the ruff/black/mypy target —
+and **they are one change, not five.** `python-consistency` enforces exactly that: clearing the
+floor on every line is not enough, the sites must also name the *same* version. A repo testing
+on one minor and shipping on another is green right up until production, which is the whole
+reason it is a rule and not a convention.
+
+Watch the lint target in particular: set *ahead* of the interpreter it makes ruff accept and
+suggest syntax that fails at runtime, silently, because ruff cannot know which interpreter
+executes; set *behind*, it withholds the modern-syntax fixes these rules exist to apply.
+
+`requires-python` is a **minimum, never a pin.** Write `>=` (or a range with an upper bound if
+something genuinely breaks above it). `~=3.11.1` is not a minimum — it means `>=3.11.1,
+==3.11.*`, which is a ceiling, and it is how a repo ends up unable to move at all.
+
+Where a dependency genuinely has no build for the floor, exempt the line and name both the
+blocker and what would unblock it:
+
+```toml
+# standards: python-support exempt -- ViennaRNA publishes no wheel for this floor yet;
+# revisit when upstream builds one, tracked in PUBLISH_NOTES.md.
+requires-python = ">=3.11"
+```
+
 ## Exception handling: the same three layers as C#
 
 1. **Entry points** — every view, DRF action, management command, Celery task, webhook
    receiver, and signal handler wraps its body in `try/except` and returns a human-readable
-   error (or a proper HTTP status). Never let a raw traceback reach a user.
+   error (or a proper HTTP status). Never let a raw traceback reach a user — nor `str(e)`:
+   what the error must say is `user-errors.md` (enforced as `technical-error-shown`).
 2. **External resource access** — every DB call that can fail, HTTP request, file operation,
    cache call, and third-party SDK call gets its own `try/except`. Rethrow or handle
    deliberately.
@@ -56,10 +87,10 @@ value" is a legitimate state, the field is `Optional[T]` and unset is `None` —
 "somebody chose this" cannot be told apart.
 
 ```python
-job.project_id = selected_project.id if selected_project else 0   # WRONG - dangling FK
-tenant_id = current_tenant_id or 0                                # WRONG - silent empty queryset
-amount_minor = session.get("amount_subtotal") or 0                # WRONG - credits a wallet ZERO
-payment_intent_id = charge.get("payment_intent") or ""            # WRONG - lookups silently miss
+job.project_id = selected_project.id if selected_project else 0  # WRONG - dangling FK
+tenant_id = current_tenant_id or 0  # WRONG - silent empty queryset
+amount_minor = session.get("amount_subtotal") or 0  # WRONG - credits a wallet ZERO
+payment_intent_id = charge.get("payment_intent") or ""  # WRONG - lookups silently miss
 ```
 
 Beware `or` specifically: `count or 10` swallows a legitimate `0`. Use
@@ -96,7 +127,7 @@ immediately is correct — the branch restores the distinction before anything i
 
 ```python
 declared_id = str(finding["meta"].get("id", "") or "").strip()
-if declared_id != "" and declared_id != finding_id:      # right - it branches on absence
+if declared_id != "" and declared_id != finding_id:  # right - it branches on absence
     errors.append(...)
 ```
 
@@ -112,7 +143,7 @@ Different rule, and the one that matters most in the webhook handlers. It is not
 null-versus-zero at all — it is about *where the data came from*:
 
 ```python
-amount_minor = session.get("amount_subtotal") or 0   # WRONG - credits a wallet ZERO
+amount_minor = session.get("amount_subtotal") or 0  # WRONG - credits a wallet ZERO
 ```
 
 `payload.get("x")` returning `None` means **the key was absent**, which is an API contract
@@ -124,10 +155,10 @@ indistinguishable: this is precisely why zero cannot double as the "key was miss
 Two correct shapes:
 
 ```python
-amount_minor = session["amount_subtotal"]            # required -> fail loudly if absent
+amount_minor = session["amount_subtotal"]  # required -> fail loudly if absent
 if (amount_minor := session.get("amount_subtotal")) is None:
     logger.error("checkout %s has no amount_subtotal", session["id"])
-    return EventDisposition.FAILED                    # optional -> handle it explicitly
+    return EventDisposition.FAILED  # optional -> handle it explicitly
 ```
 
 Note the inconsistency to watch for: code that indexes `session["id"]` on one line and
@@ -159,6 +190,9 @@ bound) is fine.
 
 - Connections are per-request. Never store a connection or queryset on a class attribute.
 - Migrations already applied to production are immutable history — fix forward with a new one.
+  Whether a migration is *correct* is `migrations.md`: run them against the engine production
+  uses and compare the result against the models, because a suite that builds its schema from
+  the models has verified the models and nothing else.
 - Query in the view/service layer, not in templates. No N+1: `select_related`/`prefetch_related`.
 - Business logic belongs on the model or a service, never in a template or a serializer.
 

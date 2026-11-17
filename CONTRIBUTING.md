@@ -64,7 +64,8 @@ field or edge already covers it.
    python build_index.py --check
    ```
    and, if you changed the tooling, its tests. Each is a plain script — no test runner needed — and
-   exits non-zero on a failure; CI runs all five on every push and pull request:
+   exits non-zero on a failure. CI runs all five on every push to a branch of this repository
+   (not on the pull request itself, so a maintainer pushes your branch here to check it):
    ```bash
    python test_study_text.py
    python test_study_sections.py

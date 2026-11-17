@@ -1,8 +1,20 @@
 ---
+paths:
+  - "**/.standards-baseline.json"
+  - "**/.standards.json"
+  - "**/GlobalSuppressions.cs"
+  - "**/eslint-suppressions.json"
 description: When and how to split oversized files, methods, and classes
 ---
 
 # Refactoring: the judgment half of the size rules
+
+**This file is gate-triggered, not always-loaded** (decided 2026-09-10). Every rule it
+carries the judgment half of is mechanically detected — `file-length`, `--paydown`, the
+`.standards.json` tuning floor, and SonarLint's method and complexity limits — and each of
+those names this file when it fires. So it loads with the artifacts you open while *acting*
+on a finding: a baseline, a suppressions file, the config. Read it when a gate sends you
+here; you are not expected to be carrying it before then.
 
 The build already enforces the numbers — method ≤ 60 lines, cyclomatic ≤ 10, cognitive ≤ 15,
 parameters ≤ 7 (`SonarLint.xml`), file ≤ 500 lines (`check-source-limits.py`). Those tell you
@@ -85,21 +97,77 @@ Splitting and rewriting in one step is how refactors introduce bugs that nobody 
 
 ## Adopting the limits on existing code
 
-**Standing policy: adopt with zero debt.** Baselining a repo's findings and calling it
-adopted is close to not adopting at all, so a repo takes the pack only when every finding is
-either fixed or exempted with a written reason. Baselines exist in the tooling for the case
-below and are not to be used as the default route.
+**A baseline is a starting point, not a resting place** (decided 2026-08-21, superseding the
+earlier "paid down only on request" policy). The size limits exist to get oversized files
+refactored. A baseline buys the *adoption* — it stops the pack landing as a wall of red on
+day one — and nothing more. It is not permission to carry a 900-line file indefinitely, and
+"it is baselined" is not an answer to "why is this file still like this?".
 
-The ratchet, where it is used at all: existing violations are recorded in a baseline
-(`.standards-baseline.json` for file length, `GlobalSuppressions.cs` for analyzer rules), and
+So: **when your branch changes a baselined file, that file leaves the branch smaller than
+it arrived** (decided 2026-08-27, superseding "do not ask whether you are allowed to; you
+are"). That wording granted permission and required nothing, and permission is not enough:
+an optional refactor loses every race against a deadline, so it is always the thing that
+gets dropped, and a rule that costs nothing to skip is not a rule.
+
+`check-source-limits.py --paydown` enforces it at push and again in CI. Two conditions,
+because either alone leaks:
+
+1. The file is **below its size recorded at the base ref** — proof this branch paid
+   something down.
+2. The working-tree baseline **records the new size** — proof you re-ran
+   `--write-baseline`. Without this the recorded number never moves, so the next branch to
+   touch the file clears condition 1 for free and the ratchet quietly stops ratcheting.
+
+Not at commit: being refused on your first commit into a big file would only teach
+`--no-verify`. The unit of work is the branch.
+
+Prefer the file you were already working in — you have the context and the diff is
+reviewable. Paying a file all the way under the limit removes its entry entirely; that is
+the target, not a bonus. **A file carrying a valid exemption owes nothing**: an exemption
+means "looked at; nothing to fix", and demanding payment anyway would push people to delete
+the marker, which is the one thing that makes the decision visible.
+
+A one-line token shrink satisfies the gate and fails review. The gate enforces the
+direction; the reviewer enforces that the slice is real.
+
+Read the findings list before writing a baseline in the first place: a baseline is for
+debt, not bugs, and a live defect filed under "pre-existing" is a defect nobody looks at
+again.
+
+
+## What `.standards.json` may not do quietly
+
+The config file can relax a rule. It may not do so **silently** — every weakening states a
+reason of at least 30 characters, the same floor an exemption meets, and every one is
+printed on each run as `tuned: <setting> = <value> -- <reason>`.
+
+This closed the back door behind every front door above. One line —
+`{"maxFileLines": 100000}` or `{"checkGitignore": false}` — used to disable any rule with no
+argument and no trace, so a repo that had switched off the gitignore check printed the same
+`clean` an honest one printed. `checkGitignore` is in `NEVER_BASELINED` precisely because an
+unignored `.env` is a live credential leak; a boolean turning it off made that decorative.
+
+A **tightening** needs no reason — `maxFileLines: 300` is not a relaxation, and charging an
+argument for it would teach people the config is hostile. `maxFileLines` above 1500 is
+refused outright: past that it is not a threshold, it is the rule switched off with the
+light left on.
+
+The ratchet: existing violations are recorded in a baseline (`.standards-baseline.json` for
+file length, `GlobalSuppressions.cs` for analyzer rules, `eslint-suppressions.json` for
+ESLint — **reset all of them or none**), and
 
 - **New files and new methods must comply.** No exceptions.
 - **Baselined items may not get worse.** A file already at 715 lines fails the build at 716.
 - **Shrinking updates the baseline downward**, so the debt only ever ratchets down.
 
-Do not mass-refactor a baseline in an unattended run. Splitting an 871-line payment service
-with no test covering it is how prod breaks. Take one baselined item per PR, with a human
-watching.
+**Refactor it, do not narrate it** — the four steps above, so each is independently
+verifiable and revertable. Where a file has no test, that is a reason to **add the
+characterisation test first**, not to leave it at 871 lines.
+
+**A split is not finished when the line count drops.** Each extracted piece is a module no
+test names, so the finding count rises first, and `max-lines-per-function` (staged files
+only) is usually still unmet. Budget both rounds; take the second only where the pieces are
+real. Measurements: [engineering-standards/docs/refactoring.md](https://github.com/jackwjensen/engineering-standards/blob/master/docs/refactoring.md).
 
 ## When a threshold is genuinely wrong
 

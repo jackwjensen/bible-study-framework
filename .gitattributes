@@ -3,3 +3,16 @@
 # markers; sync_state.py reads a merged base safely (a disputed item is compared with
 # the server afresh, a merged cursor is not trusted). See SYNC.md.
 .sync/*.state.jsonl merge=union
+
+# Line endings for files that run under a Unix shell: a CR is a syntax error to sh. The git
+# hooks from engineering-standards are shell scripts without an extension, so *.sh alone
+# would not catch them; a PC with core.autocrlf=true would otherwise check them out CRLF.
+*.sh                             text eol=lf
+Dockerfile                       text eol=lf
+Dockerfile.*                     text eol=lf
+*.Dockerfile                     text eol=lf
+engineering_standards/hooks/*    text eol=lf
+
+# cmd.exe finds `goto` / `call :label` targets reliably only in CRLF files.
+*.bat                            text eol=crlf
+*.cmd                            text eol=crlf

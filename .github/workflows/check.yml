@@ -1,44 +1,105 @@
-# Validates the corpus on every push and pull request.
+# Checks every branch push and every manual run. Nothing here deploys: this repository has
+# no deploy job, so the branch flow is only "every branch gets the full check before it is
+# merged into main".
 #
-# This matters most for contributions: a pull request gets its findings checked
-# for broken [[wikilinks]], unknown edge ids, duplicate or mismatched ids, missing
-# required fields and invalid status/claim_type/origin values before a human looks
-# at it. Review is then about substance rather than schema-checking by hand.
+# A branch gets its findings checked for broken [[wikilinks]], unknown edge ids, duplicate
+# or mismatched ids, missing required fields and invalid status/claim_type/origin values
+# before a human looks at it. Review is then about substance rather than schema-checking by
+# hand. There is no pull_request trigger (Jack, 2026-11-17, following the pack's template):
+# a contribution from a fork is checked once it is pushed to a branch of this repository.
 #
-# Deliberately does NOT regenerate INDEX.md and commit it back. Pull requests from
-# forks get a read-only token, so it could not push anyway — and a contributor's
-# regenerated index in the diff is noise. Regenerate locally, or let the maintainer
-# do it on merge.
+# Deliberately does NOT regenerate INDEX.md and commit it back: a contributor's regenerated
+# index in the diff is noise. Regenerate locally, or let the maintainer do it on merge.
 #
 # Note this only helps corpora hosted on GitHub. Most people using this framework
 # run the validator locally via their assistant and never open a GitHub account,
 # which is fine and fully supported — see README.md.
+#
+# The standards half follows engineering-standards/ci/check-node-python.yml (Python only).
+# That template names the trunk `master`; this repository's trunk is `main`, so every
+# `refs/heads/master` in it reads `refs/heads/main` here.
 
 name: check
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches: ['**']
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
+  check:
+    # Named after its consequence: a red tick means the branch is not fit to merge into main.
+    name: Checks — do not merge into main if red
+    # The server's Ubuntu release, never `ubuntu-latest` (engineering-standards: runner-image).
+    runs-on: ubuntu-26.04
+    # Empty unless the head commit carries a `Deploy-Hold:` trailer. Nothing reads it today,
+    # since nothing deploys; it is exported so a deploy job added later gates on it as the
+    # template does, without anyone having to remember the step.
+    outputs:
+      deploy_hold: ${{ steps.deploy_hold.outputs.value }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
-          python-version: '3.12'
+          # Full history: the scanner-tests step diffs `before` against HEAD, and the
+          # pay-down check diffs the branch against `origin/main`.
+          fetch-depth: 0
 
-      # Engineering standards: file length, unset-not-zero, payload-default, date ranges.
-      # There is no baseline file — this repo carries no adoption debt, so any violation
-      # here was introduced by the change under test rather than inherited.
-      - name: Source limits
-        run: python scripts/check-source-limits.py --root . --format github
+      # The head commit's `Deploy-Hold:` TRAILER, not a substring of its message: a commit
+      # that only mentions the word is not held.
+      - name: Read the Deploy-Hold trailer
+        id: deploy_hold
+        run: |
+          value="$(git log -1 --format='%(trailers:key=Deploy-Hold,valueonly)' | tr -d '[:space:]')"
+          echo "value=$value" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0  # v7.1.0
+        with:
+          python-version: '3.14'
+          # pip's download cache, keyed on the one requirements file the job installs from.
+          # The corpus tooling itself is standard library only.
+          cache: pip
+          cache-dependency-path: engineering_standards/requirements.txt
+
+      # From the pack's own declaration, never versions typed here: `verify.py --strict`
+      # turns a skipped gate into a failure, and the scanner's self-tests need pytest.
+      - name: Install the gate's own tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r engineering_standards/requirements.txt
+
+      # The scanner's own cases, over the directory, never a list of test files. Runs on every
+      # push to main, on workflow_dispatch, on a new branch's first push, and otherwise only
+      # when engineering_standards/ changed.
+      - name: Did the scanner change?
+        id: scanner
+        env:
+          BEFORE: ${{ github.event.before }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" = "refs/heads/main" ] || [ "$EVENT" = "workflow_dispatch" ] \
+             || [ -z "${BEFORE//0/}" ] \
+             || ! git diff --quiet "$BEFORE" HEAD -- engineering_standards/; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Scanner tests
+        if: steps.scanner.outputs.changed == 'true'
+        run: python -m pytest engineering_standards/ -q
+
+      # The full CI stage: the whole-tree scan, the pay-down check and the dependency gate.
+      # --strict makes a missing toolchain a failure rather than a skip.
+      - name: Verify
+        run: python engineering_standards/verify.py --ci --strict --format github
+        # The dependency gate asks GitHub for each Action's newest release; unauthenticated
+        # that is 60 requests an hour per IP, shared by every job on a hosted runner.
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
 
       # Each test file runs as a plain script (standard library only, no runner) and
       # exits non-zero on any failure; `set -e` stops at the first file that fails.

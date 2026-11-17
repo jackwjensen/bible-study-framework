@@ -1,0 +1,80 @@
+#!/bin/sh
+# The fast local stage: the source-limit scan scoped to what changed since trunk, then
+# build, type-check, lint, tests.
+#
+# A push is no longer the deploy (Jack, 2026-11-17): work moves to branches, a branch push
+# deploys nothing, and CI runs the full gate -- the dependency gate and the whole-tree scan
+# included -- on every branch push and blocks the deploy. So this hook stays fast and the
+# slow, networked checks live in CI.
+#
+# Escape hatch:  SKIP_STANDARDS_GATE=1 git push ...     (or git push --no-verify)
+#
+# Source of truth: engineering-standards/engineering_standards/hooks/pre-push
+
+set -e
+
+HOOK_DIRECTORY=$(dirname "$0")
+
+"$HOOK_DIRECTORY/_verify.sh"
+
+# A repo that PUBLISHES Claude skills installs them into ~/.claude/skills here, because a
+# skill is invoked from there and never from the repo -- so the two are separate copies and
+# the installed one silently rots. See engineering_standards/dev/sync_skills.py for the incident.
+#
+# Push is the right trigger, and `set -e` above is load-bearing: the sync only runs once the
+# gate has passed and the work is going out, so what gets installed is a verified, published
+# version rather than a half-finished working-tree edit.
+#
+# Guarded on the script EXISTING rather than on the repo's name, so this stays generic: a
+# consuming repo has no engineering_standards/dev/ at all (sync_pack.py copies only the top
+# level of engineering_standards/), which makes this a silent no-op everywhere but the pack.
+#
+# Deliberately cannot fail the push. A permission problem under ~/.claude is a local config
+# fault that has nothing to do with the code being published, and blocking a good push on it
+# would teach the escape hatch.
+REPOSITORY_ROOT=$(git rev-parse --show-toplevel)
+SYNC_SKILLS="$REPOSITORY_ROOT/engineering_standards/dev/sync_skills.py"
+PYTHON=$("$HOOK_DIRECTORY/_python.sh")
+
+if [ -f "$SYNC_SKILLS" ] && [ -n "$PYTHON" ]; then
+    "$PYTHON" "$SYNC_SKILLS" --apply || \
+        echo "standards: skill sync failed; ~/.claude/skills may be stale. Push continues." >&2
+fi
+
+# Does THIS repo's copy of the pack lag the pack itself? Asked by the repo, about the repo,
+# at the one moment its owner is standing here and can act on the answer.
+#
+# This is the pull model's missing half. Nothing told a repo an update existed; the estate-wide
+# drift report used to, from the wrong end -- printed while pushing the PACK, about work that
+# happens in a different repo days later. See engineering_standards/standards_pack_update.py for why it
+# reports rather than self-updating: a self-update runs the gate against the wrong rules
+# whichever order you pick, and leaves uncommitted edits behind after the push has gone.
+#
+# Reports, never blocks, changes nothing. A pack it cannot reach is a WARNING on stderr, not
+# silence: "I could not check" and "you are current" must not look the same, which is the
+# confusion behind the drift guard that lived only in three documents and the pytest gate that
+# reported skipped on a machine without pytest.
+PACK_UPDATE="$REPOSITORY_ROOT/engineering_standards/standards_pack_update.py"
+
+if [ -f "$PACK_UPDATE" ] && [ -n "$PYTHON" ]; then
+    "$PYTHON" "$PACK_UPDATE" "$REPOSITORY_ROOT" || true
+fi
+
+# NOTHING HERE ENUMERATES REPOSITORIES, and that is deliberate. The check above reads exactly
+# one directory it already knows the name of -- its own supplier -- which is the opposite
+# direction from what used to be here and cannot fan out into it.
+#
+# Two blocks used to sit at this point: a drift summary naming every adopted repo that had
+# fallen behind, and an impact report running the changed scanner against each of those repos
+# to show the per-rule findings delta. Both walked the whole of the source tree on every push.
+# Both were removed on 2026-08-27, at Jack's instruction, with `adopted_repos()` and
+# engineering_standards/dev/estate_impact.py.
+#
+# The drift count was printed where nobody could act on it -- pushing THIS repo, about work
+# that happens inside a different one, days later -- and a number you cannot act on where you
+# read it is a number you learn to scroll past. The impact report answered a question nobody
+# had: what a new rule does to a repository untouched for five years does not change the rule,
+# and those findings belong to that repo's owner on the day it pulls.
+#
+# What protects a rule change instead is local and lives in this repo: its own test file, with
+# synthetic positive cases and real source to prove it stays quiet. See docs/changing-a-rule.md.
