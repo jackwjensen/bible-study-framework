@@ -2,7 +2,7 @@
 
 # Study Corpus Index
 
-The map of every biblical-study **finding**. One atomic claim per file in `findings/`; firmness in each finding's `status:`. **Read this first** before biblical-theme work, then open the findings it points to. This file is generated — edit the findings, then run `python build_index.py`.
+The map of every **finding** in this study. One atomic claim per file in `findings/`; firmness in each finding's `status:`. **Read this first** before work on this study, then open the findings it points to. This file is generated — edit the findings, then run `python build_index.py`.
 
 _0 findings · 0 theme hubs · 0 threads._
 
@@ -22,9 +22,9 @@ _Your body of work is **own** + **mixed**; **reused** is context. Unclassified f
 
 _No keywords yet._
 
-## By scripture
+## By citation
 
-_No scripture references yet._
+_No citations yet._
 
 ## Relationships & gaps
 

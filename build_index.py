@@ -28,6 +28,7 @@ from study_corpus import (
 )
 from study_file import StudyFileError, load_study
 from study_sections import build_index
+from study_words import words_for
 
 # ── validation ───────────────────────────────────────────────────────────────
 
@@ -174,7 +175,7 @@ def main(argv: list[str]) -> int:
     check_only = "--check" in argv[1:]
 
     try:
-        load_study(STUDY_DIR)
+        study = load_study(STUDY_DIR)
     except StudyFileError as error:
         print(f"error:  {error}", file=sys.stderr)
         return 1
@@ -207,7 +208,8 @@ def main(argv: list[str]) -> int:
         print(f"OK — {counts}, {len(notices)} notice(s).", file=sys.stderr)
         return 0
 
-    INDEX_FILE.write_text(build_index(findings, themes, threads, imported),
+    INDEX_FILE.write_text(build_index(findings, themes, threads, imported,
+                                    words_for(study.word_set, study.language)),
                           encoding="utf-8", newline="\n")
     print(f"Wrote {INDEX_FILE.name} — {counts}, {len(notices)} notice(s), {len(errors)} error(s).",
           file=sys.stderr)
