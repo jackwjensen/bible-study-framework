@@ -30,7 +30,7 @@ from study_sections import (  # noqa: E402
 def finding(title: str, status: str = STATUS_ORDER[0], **fields: object) -> dict:
     """A finding record with every field the renderers read."""
     record = {"title": title, "status": status, "file": f"findings/{title}.md",
-              "claim_type": "", "gloss": "", "scripture": []}
+              "claim_type": "", "gloss": "", "citations": []}
     record.update(fields)
     return record
 
@@ -89,8 +89,8 @@ def test_section_by_scripture_says_so_when_empty() -> None:
 
 def test_section_by_scripture_marks_a_shared_reference() -> None:
     findings = {
-        "a": finding("a", scripture=["John 3:16"]),
-        "b": finding("b", scripture=["John 3:16", "John 10:1"]),
+        "a": finding("a", citations=["John 3:16"]),
+        "b": finding("b", citations=["John 3:16", "John 10:1"]),
     }
     lines = section_by_scripture(findings)
     shared = next(line for line in lines if line.startswith("- **John 3:16**"))

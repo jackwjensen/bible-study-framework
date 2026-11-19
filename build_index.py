@@ -22,7 +22,7 @@ from __future__ import annotations
 import sys
 
 from study_corpus import (
-    FINDINGS_DIR, INDEX_FILE, REQUIRED_FINDING_FIELDS, THEMES_DIR, THREADS_DIR, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
+    CITATION_SHAPE, FINDINGS_DIR, INDEX_FILE, REQUIRED_FINDING_FIELDS, THEMES_DIR, THREADS_DIR, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
     VALID_THREAD_STATUSES, linkable_id, load_findings, load_imported, load_themes,
     load_threads
 )
@@ -82,6 +82,15 @@ def validate(findings: dict, themes: dict, threads: dict,
         if finding["origin"] != "" and finding["origin"] not in VALID_ORIGINS:
             errors.append(f"{where}: invalid origin '{finding['origin']}' "
                           f"(allowed: {', '.join(VALID_ORIGINS)})")
+
+        if "scripture" in finding["meta"]:
+            errors.append(f"{where}: the field 'scripture' was renamed to citations, and each "
+                          f"entry now names its corpus (e.g. bible:John 3:16)")
+
+        for citation in finding["citations"]:
+            if CITATION_SHAPE.match(citation) is None:
+                errors.append(f"{where}: citation '{citation}' does not name its corpus "
+                              f"(write corpus:reference, e.g. bible:John 3:16)")
 
         for edge_field in ("related", "builds_on", "tension_with"):
             for target in finding[edge_field]:

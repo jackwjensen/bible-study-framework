@@ -193,7 +193,7 @@ def section_by_scripture(findings: dict) -> list[str]:
     out = ["## By scripture", ""]
     by_ref: dict[str, list[dict]] = {}
     for finding in findings.values():
-        for ref in finding["scripture"]:
+        for ref in finding["citations"]:
             by_ref.setdefault(ref, []).append(finding)
     if not by_ref:
         out += ["_No scripture references yet._", ""]

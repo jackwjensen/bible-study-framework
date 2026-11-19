@@ -66,8 +66,24 @@ VALID_ORIGINS = ["own", "reused", "mixed"]
 REQUIRED_FINDING_FIELDS = ["id", "title", "status"]
 
 #: List-valued frontmatter fields on a finding, normalized to lists.
-FINDING_LIST_FIELDS = ["themes", "keywords", "scripture", "related", "builds_on",
+FINDING_LIST_FIELDS = ["themes", "keywords", "citations", "related", "builds_on",
                        "tension_with", "sources", "posts"]
+
+#: A citation names its corpus before the reference: "bible:John 3:16",
+#: "dklaw:Momsloven § 37". The corpus code is lowercase letters and digits; the reference
+#: is whatever that corpus cites by, so it may itself contain colons.
+CITATION_SHAPE = re.compile(r"^([a-z0-9]+):(\S.*)$")
+
+
+def split_citation(text: str) -> tuple[str, str]:
+    """Split a citation into (corpus, reference) at the first colon.
+
+    Raises ValueError for a citation that does not name its corpus.
+    """
+    match = CITATION_SHAPE.match(text)
+    if match is None:
+        raise ValueError(f"citation '{text}' does not name its corpus (expected corpus:reference)")
+    return match.group(1), match.group(2)
 
 #: Lifecycle of an open thread (a live/unresolved investigation).
 VALID_THREAD_STATUSES = ["open", "deferred", "resolved"]
