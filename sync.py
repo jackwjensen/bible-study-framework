@@ -6,7 +6,7 @@ Nothing else in the framework needs this file, a server, or an account. It is
 for people who also keep their findings somewhere else (SourceText is one such
 server; the protocol is in SYNC.md and any server may implement it).
 
-    python sync.py add sourcetext https://sourcetext.ai --corpus bible
+    python sync.py add sourcetext https://sourcetext.ai
     python sync.py login                 # once per computer: approve in the browser
     python sync.py login --name laptop   # ... listed on the server as "laptop", not the host name
     python sync.py run --dry-run         # what would move, and why
@@ -35,6 +35,7 @@ from sync_http import (
 )
 from sync_http import login as http_login
 from sync_http import logout as http_logout
+from study_file import StudyFileError, load_study
 from sync_plan import (
     COMPARE, CONFLICT, FORGET, LOCAL_DELETE, NOTHING, PULL, PUSH, PUSH_DELETE, STILL_OPEN, Step,
     plan, same_claim
@@ -295,15 +296,23 @@ def _remote(root: Path, name: str | None) -> tuple[str, dict]:
             raise SyncError("name the remote (configured: " + (", ".join(remotes) or "none") + ")")
         name = next(iter(remotes))
     if name not in remotes:
-        raise SyncError(f"no remote called '{name}'; add one: python sync.py add <name> <url> --corpus <code>")
+        raise SyncError(f"no remote called '{name}'; add one: python sync.py add <name> <url>")
     return name, remotes[name]
 
 
+def api_corpus(root: Path) -> str:
+    """The corpus the sync API path carries: the study's own, from study.md."""
+    try:
+        return load_study(root).corpus
+    except StudyFileError as error:
+        raise SyncError(str(error)) from error
+
+
 def cmd_add(args: argparse.Namespace, root: Path, store: TokenStore) -> int:
-    if not slug_ok(args.name) or not slug_ok(args.corpus):
-        raise SyncError("the name and the corpus code are lowercase letters, digits and dashes")
+    if not slug_ok(args.name):
+        raise SyncError("the name is lowercase letters, digits and dashes")
     remotes = load_remotes(root)
-    remotes[args.name] = {"url": check_server_url(args.url), "corpus": args.corpus}
+    remotes[args.name] = {"url": check_server_url(args.url)}
     save_remotes(root, remotes)
     print(f"Added '{args.name}'. Next, once on this computer: python sync.py login {args.name}")
     return 0
@@ -329,7 +338,7 @@ def cmd_logout(args: argparse.Namespace, root: Path, store: TokenStore) -> int:
 
 def cmd_run(args: argparse.Namespace, root: Path, store: TokenStore) -> int:
     name, remote = _remote(root, args.name)
-    client = Client(remote["url"], remote["corpus"], store)
+    client = Client(remote["url"], api_corpus(root), store)
     outcome = Syncer(root, name, client, dry_run=args.dry_run).run()
     return report(root, name, outcome, dry_run=args.dry_run)
 
@@ -340,7 +349,6 @@ def main(argv: list[str], *, root: Path = ROOT, store: TokenStore | None = None)
     p_add = sub.add_parser("add", help="name a server to sync with")
     p_add.add_argument("name")
     p_add.add_argument("url", help="the server's root address, e.g. https://sourcetext.ai")
-    p_add.add_argument("--corpus", required=True, help="the server's corpus code, e.g. bible")
     p_add.set_defaults(func=cmd_add)
     for command, helptext, func in (("login", "sign in once on this computer", cmd_login),
                                     ("logout", "revoke this computer's sign-in", cmd_logout)):

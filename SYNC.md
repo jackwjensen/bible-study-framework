@@ -29,7 +29,7 @@ one changed `status` is a difference.
 ## Setting it up
 
 ```bash
-python sync.py add sourcetext https://sourcetext.ai --corpus bible
+python sync.py add sourcetext https://sourcetext.ai
 python sync.py login            # once on each computer — approve in the browser
 python sync.py run --dry-run    # see what would move
 python sync.py run

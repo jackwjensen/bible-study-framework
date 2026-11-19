@@ -127,7 +127,11 @@ def load_remotes(root: Path) -> dict:
     path = sync_dir(root) / "remotes.json"
     if not path.exists():
         return {}
-    return json.loads(path.read_text(encoding="utf-8")).get("remotes", {})
+    remotes = json.loads(path.read_text(encoding="utf-8")).get("remotes", {})
+    # An older version kept the corpus here; it now lives in study.md. Drop it on read, so the
+    # next save rewrites the file without it.
+    return {name: {key: value for key, value in remote.items() if key != "corpus"}
+            for name, remote in remotes.items()}
 
 
 def save_remotes(root: Path, remotes: dict) -> None:

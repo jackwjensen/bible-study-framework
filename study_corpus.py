@@ -72,7 +72,8 @@ FINDING_LIST_FIELDS = ["themes", "keywords", "citations", "related", "builds_on"
 #: A citation names its corpus before the reference: "bible:John 3:16",
 #: "dklaw:Momsloven § 37". The corpus code is lowercase letters and digits; the reference
 #: is whatever that corpus cites by, so it may itself contain colons.
-CITATION_SHAPE = re.compile(r"^([a-z0-9]+):(\S.*)$")
+CORPUS_CODE = r"[a-z0-9]+"
+CITATION_SHAPE = re.compile(rf"({CORPUS_CODE}):(\S.*)")
 
 
 def split_citation(text: str) -> tuple[str, str]:
@@ -80,7 +81,7 @@ def split_citation(text: str) -> tuple[str, str]:
 
     Raises ValueError for a citation that does not name its corpus.
     """
-    match = CITATION_SHAPE.match(text)
+    match = CITATION_SHAPE.fullmatch(text)
     if match is None:
         raise ValueError(f"citation '{text}' does not name its corpus (expected corpus:reference)")
     return match.group(1), match.group(2)

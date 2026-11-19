@@ -22,10 +22,11 @@ from __future__ import annotations
 import sys
 
 from study_corpus import (
-    CITATION_SHAPE, FINDINGS_DIR, INDEX_FILE, REQUIRED_FINDING_FIELDS, THEMES_DIR, THREADS_DIR, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
+    CITATION_SHAPE, FINDINGS_DIR, INDEX_FILE, STUDY_DIR, REQUIRED_FINDING_FIELDS, THEMES_DIR, THREADS_DIR, VALID_CLAIM_TYPES, VALID_ORIGINS, VALID_STATUSES,
     VALID_THREAD_STATUSES, linkable_id, load_findings, load_imported, load_themes,
     load_threads
 )
+from study_file import StudyFileError, load_study
 from study_sections import build_index
 
 # ── validation ───────────────────────────────────────────────────────────────
@@ -88,7 +89,7 @@ def validate(findings: dict, themes: dict, threads: dict,
                           f"entry now names its corpus (e.g. bible:John 3:16)")
 
         for citation in finding["citations"]:
-            if CITATION_SHAPE.match(citation) is None:
+            if CITATION_SHAPE.fullmatch(citation) is None:
                 errors.append(f"{where}: citation '{citation}' does not name its corpus "
                               f"(write corpus:reference, e.g. bible:John 3:16)")
 
@@ -171,6 +172,12 @@ def unresolved_sync_conflicts() -> list[str]:
 
 def main(argv: list[str]) -> int:
     check_only = "--check" in argv[1:]
+
+    try:
+        load_study(STUDY_DIR)
+    except StudyFileError as error:
+        print(f"error:  {error}", file=sys.stderr)
+        return 1
 
     findings = load_findings()
     themes = load_themes()

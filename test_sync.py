@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import shutil
 import sys
@@ -43,7 +44,9 @@ class Env:
             (self.root / folder).mkdir(parents=True)
         self.store = TokenStore(self.temp / "tokens")
         self.server = FakeServer()
-        sync_state.save_remotes(self.root, {"st": {"url": self.server.url, "corpus": CORPUS}})
+        (self.root / "study.md").write_text(
+            f"---\ncorpus: {CORPUS}\nword_set: default\nlanguage: en\n---\n", encoding="utf-8")
+        sync_state.save_remotes(self.root, {"st": {"url": self.server.url}})
         self.store.save(self.server.url, {
             "client_id": "client-1", "token_endpoint": self.server.url + "/token",
             "revocation_endpoint": self.server.url + "/revoke",
@@ -437,6 +440,30 @@ def test_same_claim_ignores_serialisation_but_not_content() -> None:
     # As SourceText stores it: lists sorted and quoted (seen in the end-to-end run).
     assert same_claim(b"---\nrelated: [b, a]\n---\nB", b'---\nrelated: ["a", "b"]\n---\nB', "a")
     assert not same_claim(b"---\nrelated: [b, a]\n---\nB", b'---\nrelated: ["a"]\n---\nB', "a")
+
+
+@with_env
+def test_sync_add_uses_study_corpus(env: Env) -> None:
+    """`add` takes no --corpus; the API path carries the study's corpus."""
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        code = sync.main(["sync.py", "add", "other", env.server.url], root=env.root, store=env.store)
+    assert code == 0
+    saved = json.loads((env.root / ".sync" / "remotes.json").read_text(encoding="utf-8"))
+    assert saved["remotes"]["other"] == {"url": env.server.url}
+    assert "corpus" not in (env.root / ".sync" / "remotes.json").read_text(encoding="utf-8")
+    assert sync.api_corpus(env.root) == CORPUS
+
+
+@with_env
+def test_old_remote_with_corpus_is_read_and_rewritten_without_it(env: Env) -> None:
+    path = env.root / ".sync" / "remotes.json"
+    path.write_text(json.dumps({"remotes": {"st": {"url": env.server.url, "corpus": "bible"}}}),
+                    encoding="utf-8")
+    remotes = sync_state.load_remotes(env.root)
+    assert remotes == {"st": {"url": env.server.url}}
+    sync_state.save_remotes(env.root, remotes)
+    assert "corpus" not in path.read_text(encoding="utf-8")
 
 
 def run_all(namespace: dict) -> int:
