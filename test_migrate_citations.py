@@ -18,12 +18,12 @@ def doc(middle: str) -> str:
 
 def test_inline_list() -> None:
     out = migrate_file(doc('scripture: ["Mark 2:27", Acts 10:44-48]\n'), "bible")
-    assert out == doc('citations: ["bible:Acts 10:44-48", "bible:Mark 2:27"]\n')
+    assert out == doc('citations: ["bible:Mark 2:27", "bible:Acts 10:44-48"]\n')
 
 
 def test_block_list() -> None:
     out = migrate_file(doc('scripture:\n  - "Numbers 23:23"\n  - Numbers 22:38\n'), "bible")
-    assert out == doc('citations: ["bible:Numbers 22:38", "bible:Numbers 23:23"]\n')
+    assert out == doc('citations: ["bible:Numbers 23:23", "bible:Numbers 22:38"]\n')
 
 
 def test_empty_list() -> None:
@@ -37,7 +37,12 @@ def test_idempotent() -> None:
 
 def test_already_qualified_untouched() -> None:
     out = migrate_file(doc('scripture: ["law:Momsloven § 37", "Mark 2:27"]\n'), "bible")
-    assert out == doc('citations: ["bible:Mark 2:27", "law:Momsloven § 37"]\n')
+    assert out == doc('citations: ["law:Momsloven § 37", "bible:Mark 2:27"]\n')
+
+
+def test_order_is_kept_and_duplicates_dropped() -> None:
+    out = migrate_file(doc('scripture: ["Z 1:1", "A 1:1", "Z 1:1", "M 1:1"]\n'), "bible")
+    assert out == doc('citations: ["bible:Z 1:1", "bible:A 1:1", "bible:M 1:1"]\n')
 
 
 def test_body_untouched_and_key_position_kept() -> None:

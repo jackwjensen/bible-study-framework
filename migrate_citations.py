@@ -10,7 +10,7 @@ An entry that already names a corpus is kept as it is. The new line takes the ol
 and nothing else in the file moves, so the diff is one line per finding.
 
 The list is written the way the framework's canonical form writes it: inline, every entry
-double-quoted (`"` and `\\` escaped), sorted. An empty list stays `citations: []`.
+double-quoted (`"` and `\\` escaped), in the order the file had them. An empty list stays `citations: []`.
 
 `--check` lists the files that would change, writes nothing, and exits 1 if there are any.
 Running it again on a migrated study changes nothing, so it is safe to re-run.
@@ -80,7 +80,7 @@ def migrate_file(text: str, corpus: str) -> str:
             stop += 1
         entries = normalize_list(items)
 
-    qualified = sorted({_qualify(entry, corpus) for entry in entries})
+    qualified = [_qualify(entry, corpus) for entry in entries]
     new_line = "citations: [" + ", ".join(_quote(entry) for entry in qualified) + "]"
     lines[start:stop] = [new_line + _line_ending(lines[start])]
     return "".join(lines)
