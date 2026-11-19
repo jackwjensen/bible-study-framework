@@ -1,0 +1,63 @@
+{
+  "about": [
+    "The words a study is shown in: the status labels, the counts' nouns and the confirm wording. This file is the framework's. SourceText consumes it verbatim (web-shared/study-words.json) and so does Jack's Corner; neither keeps a second copy.",
+    "A study names a set (study.md's word_set, 'default' when it says nothing) and a language. A set is an overlay: per language, a key here replaces the default set's string with the same key, and a key a set does not name falls back to its own English, then to default/en, which holds every key.",
+    "Display only. Stored codes (finding statuses, exports, sync, packs, feeds) never change, and no word here is read back as data."
+  ],
+  "sets": {
+    "default": {
+      "en": {
+        "findings.status.hypothesis": "Hypothesis",
+        "findings.status.developing": "Developing",
+        "findings.status.established": "Established",
+        "findings.status.firm": "Firm",
+        "findings.status.contested": "Contested",
+        "findings.status.retired": "Retired",
+        "threads.status.open": "Open",
+        "threads.status.deferred": "Deferred",
+        "threads.status.resolved": "Resolved",
+        "count.finding.one": "finding",
+        "count.finding.other": "findings",
+        "count.theme.one": "theme",
+        "count.theme.other": "themes",
+        "count.thread.one": "thread",
+        "count.thread.other": "threads",
+        "adopt.confirm": "I believe this to be true"
+      },
+      "da": {
+        "findings.status.hypothesis": "Hypotese",
+        "findings.status.developing": "Under udvikling",
+        "findings.status.established": "Etableret",
+        "findings.status.firm": "Fast",
+        "findings.status.contested": "Omstridt",
+        "findings.status.retired": "Opgivet"
+      }
+    },
+    "law": {
+      "en": {
+        "findings.status.hypothesis": "Idea",
+        "findings.status.developing": "Being built",
+        "findings.status.established": "Ready to put forward",
+        "findings.status.firm": "Well founded",
+        "findings.status.contested": "Disputed",
+        "findings.status.retired": "Dropped",
+        "count.finding.one": "argument",
+        "count.finding.other": "arguments",
+        "count.theme.one": "matter",
+        "count.theme.other": "matters",
+        "count.thread.one": "open question",
+        "count.thread.other": "open questions",
+        "adopt.confirm": "I would put this forward"
+      },
+      "da": {
+        "findings.status.hypothesis": "Idé",
+        "findings.status.developing": "Under opbygning",
+        "findings.status.established": "Klar til at fremføre",
+        "findings.status.firm": "Velunderbygget",
+        "findings.status.contested": "Bestridt",
+        "findings.status.retired": "Opgivet",
+        "adopt.confirm": "Jeg vil fremføre dette"
+      }
+    }
+  }
+}

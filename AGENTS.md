@@ -130,8 +130,10 @@ by rule, and never delete a `.remote` file without the user's say — that is wh
 ## Engineering standards (for anyone editing the tooling, not the corpus)
 
 The Python under `build_index.py` / `packs*.py` / `study_corpus.py` / `study_frontmatter.py` /
-`study_sections.py` / `user_secrets.py` is
-checked by the shared standards pack. **This only concerns changes to the *code*** — writing
+`study_sections.py` / `study_words.py` / `user_secrets.py` is
+checked by the shared standards pack. (`word_sets.json` beside them is data: the study's display
+words per word set and language, read by `study_words.py` and consumed verbatim by SourceText and
+Jack's Corner; stored codes never change.) **This only concerns changes to the *code*** — writing
 findings and threads is unaffected.
 
 The verification is `python engineering_standards/verify.py` — one definition, three callers.
