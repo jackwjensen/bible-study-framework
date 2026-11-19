@@ -1,7 +1,7 @@
 {
   "about": [
     "The words a study is shown in: the status labels, the counts' nouns and the confirm wording. This file is the framework's. SourceText consumes it verbatim (web-shared/study-words.json) and so does Jack's Corner; neither keeps a second copy.",
-    "A study names a set (study.md's word_set, 'default' when it says nothing) and a language. A set is an overlay: per language, a key here replaces the default set's string with the same key, and a key a set does not name falls back to its own English, then to default/en, which holds every key.",
+    "A study names a set (study.md's word_set, 'default' when it says nothing) and a language. A set is an overlay: per language, a key here replaces the default set's string with the same key. A language a set does not have at all falls back to that set's English, then to default/en. A key missing from a language the set does have falls back to default/<language>, then to default/en, which holds every key.",
     "Display only. Stored codes (finding statuses, exports, sync, packs, feeds) never change, and no word here is read back as data."
   ],
   "sets": {
@@ -56,6 +56,12 @@
         "findings.status.firm": "Velunderbygget",
         "findings.status.contested": "Bestridt",
         "findings.status.retired": "Opgivet",
+        "count.finding.one": "argument",
+        "count.finding.other": "argumenter",
+        "count.theme.one": "sag",
+        "count.theme.other": "sager",
+        "count.thread.one": "uafklaret spørgsmål",
+        "count.thread.other": "uafklarede spørgsmål",
         "adopt.confirm": "Jeg vil fremføre dette"
       }
     }

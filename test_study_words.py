@@ -29,6 +29,17 @@ def test_law_da_status_words() -> None:
     assert words["threads.status.open"] == "Open"
 
 
+def test_law_da_counts_use_law_nouns() -> None:
+    words = words_for("law", "da")
+    assert words["count.finding.one"] == "argument"
+    assert words["count.finding.other"] == "argumenter"
+    law_da = DATA["sets"]["law"]["da"]
+    default_en = DATA["sets"]["default"]["en"]
+    counts = {k: v for k, v in law_da.items() if k.startswith("count.")}
+    assert len(counts) == 6
+    assert all(v != default_en[k] for k, v in counts.items())
+
+
 def test_unknown_set_raises() -> None:
     with pytest.raises(UnknownWordSet):
         words_for("nope", "en")
