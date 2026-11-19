@@ -31,7 +31,7 @@ def _is_scalar_item(item: str) -> bool:
     A *quoted* item is always a scalar, however many colons it contains. Without
     this, `- "Numbers 22:38"` matched neither the plain-item rule (it has a
     colon) nor the map rule (it starts with a quote, not a word), and the line
-    was silently discarded — a `scripture:` list of seventeen refs survived as
+    was silently discarded — a `citations:` list of seventeen refs survived as
     one. Verse references are the single most common thing in this corpus to
     write as a quoted block list, so the shape that got dropped was the shape
     the corpus is made of.

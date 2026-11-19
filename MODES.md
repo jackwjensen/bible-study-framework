@@ -201,7 +201,7 @@ Say **"save the findings"** (or "save to study") in any session, and the assista
 
 1. **Extract** the atomic findings established in the conversation — one claim each.
 2. **Propose them for confirmation first** — id, title, `status`, `claim_type`, themes, keywords,
-   scripture, edges — and **wait**. Nothing is written until you approve. Adversarial objections are not
+   citations, edges — and **wait**. Nothing is written until you approve. Adversarial objections are not
    saved as findings unless you say so.
 3. On approval, **write** `findings/<id>.md` per the schema in [`README.md`](README.md), wiring
    `related` / `builds_on` / `tension_with` and noting the mode's provenance in the body.

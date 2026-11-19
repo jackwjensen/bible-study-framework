@@ -80,6 +80,9 @@ the assistant re-invents your conclusions with fresh drift each time. With one, 
 | [`build_index.py`](build_index.py) | Regenerates `INDEX.md`; `--check` validates the corpus. The only entry point |
 | [`study_corpus.py`](study_corpus.py) | Vocabularies, paths, and the loaders. Import from here |
 | [`study_frontmatter.py`](study_frontmatter.py) | Reads a Markdown file's YAML frontmatter; knows nothing about findings |
+| [`study.md`](study.md) | Which corpus the study cites, its word set and its language. See [study.md and word sets](#studymd-and-word-sets) |
+| [`word_sets.json`](word_sets.json) | The display words each word set uses, per language. Data, not code |
+| [`migrate_citations.py`](migrate_citations.py) | One-off: rewrites an older study's `scripture:` into corpus-qualified `citations:` |
 | [`study_sections.py`](study_sections.py) | Renders loaded records into `INDEX.md`'s Markdown sections |
 | [`packs.py`](packs.py) | Export findings for someone else; import and subscribe to theirs (`packs_archive`, `packs_follow`, `packs_feed` beside it) |
 | [`SYNC.md`](SYNC.md) | *Optional.* Keeping the corpus in step with a server, both ways |
@@ -145,7 +148,7 @@ claim_type: synthesized
 origin: own
 themes: [spiritual-gifts]
 keywords: [prophecy, directionality, courier]
-scripture: ["1 Corinthians 12:7", "1 Corinthians 14:3-4", "Numbers 22:28", "John 11:51"]
+citations: ["bible:1 Corinthians 12:7", "bible:1 Corinthians 14:3-4", "bible:John 11:51", "bible:Numbers 22:28"]
 related: [office-of-prophet-differs-from-gift-of-prophecy]
 builds_on: [some-lexical-tool-finding]
 tension_with: [a-finding-that-pulls-the-other-way]
@@ -165,8 +168,34 @@ updated: 2026-07-18
 **Caveat / open.** What this does *not* settle.
 ```
 
-Only `id`, `title`, and `status` are required. The filename (without `.md`) **is** the `id` and the
+Only `id`, `title`, and `status` are required. `citations` entries name their corpus, as
+`corpus:reference` (`bible:John 3:16`); a study that cites one corpus still writes the prefix, so a
+citation means the same thing wherever the file travels. The filename (without `.md`) **is** the `id` and the
 `[[wikilink]]` target.
+
+### `study.md` and word sets
+
+`study.md`, at the root of the study, says three things once, in its frontmatter, and all three are
+required:
+
+```
+---
+corpus: bible
+word_set: default
+language: en
+---
+```
+
+- `corpus` is the code every citation starts with (`bible:John 3:16`), and the code a sync server
+  files the study under.
+- `word_set` and `language` choose the display words `INDEX.md` is written in, from
+  [`word_sets.json`](word_sets.json): status names, claim-type names, the nouns the counts use ("finding"
+  or "argument"). A key the chosen set and language do not say falls back to the `default` set in the same
+  language, then to `default` in English. Only display words change; the stored codes
+  (`hypothesis`, `asserted`, ...) never do.
+
+A study that still uses `scripture:` is migrated with `python migrate_citations.py <study-root>`
+(`--check` first lists what it would change and writes nothing).
 
 ### The three axes
 

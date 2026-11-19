@@ -25,7 +25,7 @@ def test_law_da_status_words() -> None:
     words = words_for("law", "da")
     assert words["findings.status.hypothesis"] == "Idé"
     assert words["findings.status.established"] == "Klar til at fremføre"
-    # A key law/da does not say falls back to default/en.
+    # A key law/da does not say falls back to default/da first, then default/en.
     assert words["index.claim.asserted"].startswith("asserted")
 
 

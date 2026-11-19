@@ -35,7 +35,7 @@ When `findings/` is empty, or the user seems new, do this before any study:
 ## Hard rules
 
 - **Never write a finding the user has not confirmed.** Propose first — id, title, status, claim_type,
-  themes, scripture, edges — and wait. The user draws conclusions; you do the legwork.
+  themes, citations, edges — and wait. The user draws conclusions; you do the legwork.
 - **Never set `origin: own` or `origin: mixed` on the user's behalf.** That axis is theirs to mark. You
   may seed `reused` for clearly external scholarship. Leaving it unset is correct when unsure.
 - **Never hand-edit `INDEX.md`.** It is generated. Run the tooling.
