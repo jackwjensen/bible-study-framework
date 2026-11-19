@@ -26,7 +26,7 @@ def test_law_da_status_words() -> None:
     assert words["findings.status.hypothesis"] == "Idé"
     assert words["findings.status.established"] == "Klar til at fremføre"
     # A key law/da does not say falls back to default/en.
-    assert words["threads.status.open"] == "Open"
+    assert words["index.claim.asserted"].startswith("asserted")
 
 
 def test_law_da_counts_use_law_nouns() -> None:

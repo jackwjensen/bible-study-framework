@@ -122,6 +122,63 @@ def test_index_has_no_english_in_law_da() -> None:
         assert value not in text and value not in empty, key
 
 
+def threads_of_every_status() -> dict:
+    return {status: {"title": status, "status": status, "file": f"threads/{status}.md", "gloss": ""}
+            for status in ("open", "deferred", "resolved")}
+
+
+def test_thread_headings_are_danish_in_law_da() -> None:
+    text = build_index({}, {}, threads_of_every_status(), [], LAW_DA)
+    for heading in ("### Åben — levende / uafklaret", "### Udskudt — parkeret med vilje",
+                    "### Afklaret — afklaret (gemt for historikkens skyld)"):
+        assert heading in text
+    english = words_for("default", "en")
+    for status in ("open", "deferred", "resolved"):
+        assert f"### {english['threads.status.' + status]}" not in text
+        assert english["index.threads." + status].replace("{word}", "") not in text
+
+
+def test_thread_headings_keep_their_explanation_in_default_en() -> None:
+    text = build_index({}, {}, threads_of_every_status(), [], EN)
+    for phrase in ("### Open — live / unresolved",
+                   "### Deferred — parked on purpose (do not open until called for)",
+                   "### Resolved — settled (kept for history)"):
+        assert phrase in text
+
+
+def test_main_refuses_to_write_the_index_over_a_malformed_citation() -> None:
+    import contextlib
+    import io
+    import tempfile
+
+    import build_index as cli
+
+    root = Path(tempfile.mkdtemp())
+    (root / "study.md").write_text("---\ncorpus: bible\nword_set: default\nlanguage: en\n---\n",
+                                   encoding="utf-8")
+    index = root / "INDEX.md"
+    index.write_text("untouched", encoding="utf-8")
+    bad = {"a": finding("a", "firm", id="a", meta={}, citations=["John 3:16"], themes=[],
+                        keywords=[], related=[], builds_on=[], tension_with=[], wikilinks=[],
+                        origin="", file="findings/a.md")}
+    saved = (cli.STUDY_DIR, cli.INDEX_FILE, cli.load_findings, cli.load_themes, cli.load_threads,
+             cli.load_imported, cli.unresolved_sync_conflicts)
+    cli.STUDY_DIR, cli.INDEX_FILE = root, index
+    cli.load_findings, cli.load_themes = (lambda: bad), (lambda: {})
+    cli.load_threads, cli.load_imported = (lambda: {}), (lambda: [])
+    cli.unresolved_sync_conflicts = lambda: []
+    stderr = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(stderr):
+            code = cli.main(["build_index.py"])
+    finally:
+        (cli.STUDY_DIR, cli.INDEX_FILE, cli.load_findings, cli.load_themes, cli.load_threads,
+         cli.load_imported, cli.unresolved_sync_conflicts) = saved
+    assert code == 1
+    assert index.read_text(encoding="utf-8") == "untouched"
+    assert "John 3:16" in stderr.getvalue()
+
+
 def test_default_index_names_the_study_with_the_findings_noun() -> None:
     text = build_index({}, {}, {}, [], EN)
     assert "# Study Corpus Index" in text

@@ -201,17 +201,20 @@ def main(argv: list[str]) -> int:
     if imported:
         counts += f", {sum(len(p['findings']) for p in imported)} imported from {len(imported)} pack(s)"
 
+    # Nothing is written over a corpus that does not validate: the renderer assumes
+    # well-formed records (a malformed citation would not even render).
+    if errors:
+        print(f"\nFAIL — {len(errors)} error(s).", file=sys.stderr)
+        return 1
+
     if check_only:
-        if errors:
-            print(f"\nFAIL — {len(errors)} error(s).", file=sys.stderr)
-            return 1
         print(f"OK — {counts}, {len(notices)} notice(s).", file=sys.stderr)
         return 0
 
     INDEX_FILE.write_text(build_index(findings, themes, threads, imported,
                                     words_for(study.word_set, study.language)),
                           encoding="utf-8", newline="\n")
-    print(f"Wrote {INDEX_FILE.name} — {counts}, {len(notices)} notice(s), {len(errors)} error(s).",
+    print(f"Wrote {INDEX_FILE.name} — {counts}, {len(notices)} notice(s).",
           file=sys.stderr)
     return 0
 

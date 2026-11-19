@@ -254,7 +254,7 @@ def section_threads(threads: dict, words: dict[str, str]) -> list[str]:
         members = [t for t in threads.values() if t["status"] == status]
         if not members:
             continue
-        out.append(f"### {words['threads.status.' + status]}")
+        out.append(f"### {say(words, 'index.threads.' + status, word=words['threads.status.' + status])}")
         for thread in sort_by_title(members):
             line = f"- [{thread['title']}]({thread['file']})"
             if thread["gloss"] != "":
